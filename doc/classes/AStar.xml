@@ -61,6 +61,46 @@
 				
 			</description>
 		</method>
+		<method name="add_empty">
+			<return type="void" />
+			<argument index="0" name="id" type="int" />
+			<argument index="1" name="pool_points" type="PoolIntArray" />
+			<argument index="2" name="pool_edge_points" type="PoolIntArray" />
+			<description>
+				Adds a new empty with the given positions. The [code]id[/code] must be 0 or larger.
+				Empties can be used to simplify pathing by skipping over points within [code]pool_points[/code] while the empty contains no disabled or weight_scale modified points assuming the space to be traversable with direct paths.
+				This will cause paths generated to also skip over [code]pool_points[/code] within the empty, and if the user is using a regular grid,
+				they'll have to insert the path between points which are not connected neighbors.
+
+				[code]pool_edge_points[/code] should be the points encapsulating the [code]pool_points[/code] of the empty,
+				and no connections of [code]pool_points[/code] should extend outside of [code]pool_edge_points[/code].
+
+				Empties are layer sensitive, and use a layers that are common among all [code]pool_points[/code] and [code]pool_edge_points[/code].
+				Modifying the layers of a point within an empty's points or edge_points will delete the empty.
+
+				[code]pool_edge_points[/code] are allowed to overlap with other [code]pool_edge_points[/code] of other empties but no overlapps with [code]pool_points[/code] are allowed between empties.
+
+			</description>
+		</method>
+		<method name="remove_empty">
+			<return type="void" />
+			<argument index="0" name="id" type="int" />
+			<description>
+				Removes the specified empty.
+
+
+			</description>
+		</method>
+		<method name="get_skipped_connections_of_last_path_array">
+			<return type="PoolByteArray" />
+			<description>
+				Returns a PoolByteArray array that is parallel to the returned array of the last call of [code]get_point_path()[/code] or [code]get_id_path()[/code]/
+				The value is 1 if the last point was connected and 0 if not.
+				This is for use with empties which may cause paths to not always be connected.
+
+
+			</description>
+		</method>
 		<method name="are_points_connected" qualifiers="const">
 			<return type="bool" />
 			<argument index="0" name="id" type="int" />

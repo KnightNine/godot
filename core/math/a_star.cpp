@@ -49,7 +49,7 @@ int AStar::get_available_point_id() const {
 void AStar::add_point(int p_id, const Vector3 &p_pos, real_t p_weight_scale, int p_layers) {
 	ERR_FAIL_COND_MSG(p_id < 0, vformat("Can't add a point with negative id: %d.", p_id));
 	ERR_FAIL_COND_MSG(p_weight_scale < 0, vformat("Can't add a point with weight scale less than 0.0: %f.", p_weight_scale));
-	ERR_FAIL_INDEX_MSG(p_layers, 1 << 31 - 1, vformat("Can't add a point with layers value less than 0 or more than 2^31 - 1: %d.", p_layers));
+	ERR_FAIL_INDEX_MSG(p_layers, ((1 << 31) - 1), vformat("Can't add a point with layers value less than 0 or more than 2^31 - 1: %d.", p_layers));
 
 	Point *found_pt;
 	bool p_exists = points.lookup(p_id, found_pt);
@@ -58,9 +58,12 @@ void AStar::add_point(int p_id, const Vector3 &p_pos, real_t p_weight_scale, int
 		Point *pt = memnew(Point);
 		pt->id = p_id;
 		pt->pos = p_pos;
+		pt->on_empty_edge = false;
 		pt->weight_scale = p_weight_scale;
 		pt->parallel_support_layers = p_layers;
 		pt->prev_point = nullptr;
+		pt->prev_point_connected = true;
+		pt->is_neighbour = false;
 		pt->open_pass = 0;
 		pt->closed_pass = 0;
 		pt->enabled = true;
@@ -69,6 +72,354 @@ void AStar::add_point(int p_id, const Vector3 &p_pos, real_t p_weight_scale, int
 		found_pt->pos = p_pos;
 		found_pt->weight_scale = p_weight_scale;
 	}
+}
+
+
+
+void AStar::add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVector<int> &pool_edge_points) {
+	ERR_FAIL_COND_MSG(e_id < 0, vformat("Can't add a empty with negative id: %d.", e_id));
+	Empty *found_em;
+	bool e_exists = empties.lookup(e_id, found_em);
+
+	uint32_t parallel_support_layers = 0;
+	PoolVector<int>::Read r = pool_points.read();
+	int size = pool_points.size();
+	ERR_FAIL_COND_MSG(size <= 0, vformat("Can't add a empty zero pool_points: %d.", e_id));
+	
+	int p_id = r[0];
+	Point* p;
+	bool p_exists = points.lookup(p_id, p);
+	if (p_exists) {
+		//use any pool point within points and subtract incongruencies from there
+		parallel_support_layers = p->parallel_support_layers;
+
+
+	}
+	
+	
+	
+
+
+	//if placed overlapping with an existing empty's points, remove this empty
+	bool invalid = false;
+	int invalid_type = 0;
+	int overlapping_p_id = 0;
+	
+
+	if (!e_exists) {
+		Empty* em = memnew(Empty);
+		em->id = e_id;
+
+		int size = pool_points.size();
+		
+		for (int i = 0; i < size; i++) {
+
+			int p_id = r[i];
+			Point* p;
+			bool p_exists = points.lookup(p_id, p);
+			if (p_exists) {
+				//this will remove layers that aren't supported across all points within the empty
+				parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
+
+
+				//cannot overlap with other empty points
+				if (p->empties.size() == 0) {
+					p->empties.append(em);
+					p->on_empty_edge = false;
+					em->points.set(p_id, p);
+
+					
+
+					if (!p->enabled) {
+						em->disabled_points.append(p_id);
+					}
+					if (p->weight_scale != real_t(1)) {
+						
+						em->weighted_points.append(p_id);
+						
+					}
+				}
+				else {
+					invalid = true;
+					overlapping_p_id = p_id;
+					
+					break;
+				}
+				
+
+			}
+			else {
+				invalid = true;
+				invalid_type = 1;
+				break;
+			}
+
+		}
+
+		if (!invalid){
+
+			size = pool_edge_points.size();
+			PoolVector<int>::Read r2 = pool_edge_points.read();
+			for (int i = 0; i < size; i++) {
+
+				int p_id = r2[i];
+				Point* p;
+				bool p_exists = points.lookup(p_id, p);
+				if (p_exists) {
+
+					//this will remove layers that aren't supported across all points within the empty
+					parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
+
+					//only edges are allowed to overlap with other edges
+					if (p->empties.size() == 0 || p->on_empty_edge) {
+						p->empties.append(em);
+						p->on_empty_edge = true;
+						em->edge_points.set(p_id, p);
+
+						if (!p->enabled) {
+							em->disabled_points.append(p_id);
+						}
+						if (p->weight_scale != real_t(1)) {
+
+							em->weighted_points.append(p_id);
+
+						}
+					}
+					else {
+						invalid = true;
+						overlapping_p_id = p_id;
+						
+						break;
+					}
+				}
+				else {
+					invalid = true;
+					invalid_type = 1;
+					break;
+				}
+
+			}
+
+		}
+		
+
+		em->enabled = em->weighted_points.size() == 0  && em->disabled_points.size() == 0;
+		em->parallel_support_layers = parallel_support_layers;
+
+		empties.set(e_id, em);
+	}
+	else {
+		//clear old points
+		for (OAHashMap<int, Point*>::Iterator it = found_em->points.iter(); it.valid; it = found_em->points.next_iter(it)) {
+			Point* p = *it.value;
+			p->empties.empty();
+			p->on_empty_edge = false;
+
+		}
+
+		found_em->disabled_points.empty();
+
+		found_em->points.clear();
+		int size = pool_points.size();
+		
+		for (int i = 0; i < size; i++) {
+
+			int p_id = r[i];
+			Point* p;
+			bool p_exists = points.lookup(p_id, p);
+			if (p_exists) {
+				//this will remove layers that aren't supported across all points within the empty
+				parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
+
+				//cannot overlap with other empty points
+				if (p->empties.size() == 0) {
+					p->empties.append(found_em);
+					p->on_empty_edge = false;
+					found_em->points.set(p_id, p);
+
+					if (!p->enabled) {
+						found_em->disabled_points.append(p_id);
+					}
+					if (p->weight_scale != real_t(1)) {
+
+						found_em->weighted_points.append(p_id);
+
+					}
+				}
+				else {
+					invalid = true;
+					break;
+				}
+
+			}
+			else {
+				invalid = true;
+				invalid_type = 1;
+				break;
+			}
+
+		}
+
+		//clear old edge points
+		for (OAHashMap<int, Point*>::Iterator it = found_em->edge_points.iter(); it.valid; it = found_em->edge_points.next_iter(it)) {
+			Point* p = *it.value;
+			int i = p->empties.find(found_em);
+			p->empties.remove(i);
+			p->on_empty_edge = false;
+
+		}
+
+		found_em->edge_points.clear();
+
+		if (!invalid) {
+			size = pool_edge_points.size();
+			PoolVector<int>::Read r2 = pool_edge_points.read();
+			for (int i = 0; i < size; i++) {
+
+				int p_id = r2[i];
+				Point* p;
+				bool p_exists = points.lookup(p_id, p);
+				if (p_exists) {
+					//this will remove layers that aren't supported across all points within the empty
+					parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
+
+
+					//only edges are allowed to overlap with othwr edges
+					if (p->empties.size() == 0 || p->on_empty_edge) {
+						p->empties.append(found_em);
+						p->on_empty_edge = true;
+						found_em->edge_points.set(p_id, p);
+
+						if (!p->enabled) {
+							found_em->disabled_points.append(p_id);
+						}
+						if (p->weight_scale != real_t(1)) {
+
+							found_em->weighted_points.append(p_id);
+
+						}
+					}
+					else {
+						invalid = true;
+						break;
+					}
+				}
+				else {
+					invalid = true;
+					invalid_type = 1;
+					break;
+				}
+			
+
+			}
+			
+		}
+
+		
+		// only enabled when containing no disabled points or weighted points
+		found_em->enabled = found_em->weighted_points.size() == 0 && found_em->disabled_points.size() == 0;
+		found_em->parallel_support_layers = parallel_support_layers;
+	}
+
+	if (invalid) {
+		
+		remove_empty(e_id);
+
+		//usure how i would go about printing an error without cancelling the function
+		if (invalid_type == 1) {
+			ERR_FAIL_COND_MSG(invalid, vformat("empty placement of id %d contains points which do not exist and is therefore invalid and has been removed", e_id));
+		}
+		ERR_FAIL_COND_MSG(invalid, vformat("empty placement of id %d overlaps with another empty at point %d and is therefore invalid and has been removed", e_id, overlapping_p_id));
+	}
+
+}
+//returns int array 
+PoolVector<int> AStar::debug_empty(int e_id) {
+	Empty* e;
+	bool e_exists = empties.lookup(e_id, e);
+	ERR_FAIL_COND_V_MSG(!e_exists, PoolVector<int>(), vformat("Can't debug empty. Empty with id: %d doesn't exist.", e_id));
+
+	//debug_data = [enabled(1 or 0),empty_layers,points_list_type,points_list]
+
+	PoolVector<int> debug_data;
+	int enabled = (e->enabled ? 1 : 0);
+	debug_data.append(enabled);
+
+	int layers = e->parallel_support_layers;
+	debug_data.append(layers);
+
+	if (!e->enabled) {
+		
+		if (e->weighted_points.size() > 0) {
+			debug_data.append(0); // 0 if weighted_points
+			PoolVector < int>::Read r = e->weighted_points.read();
+			for (int i = 0; i < e->weighted_points.size(); i++) {
+				debug_data.append(r[i]);
+			}
+		}
+		else if (e->disabled_points.size() > 0) {
+			debug_data.append(1); // 1 if disabled_point
+			PoolVector < int>::Read r = e->disabled_points.read();
+			for (int i = 0; i < e->disabled_points.size(); i++) {
+				debug_data.append(r[i]);
+			}
+		}
+	}
+	return debug_data;
+	
+}
+PoolVector<int> AStar::get_point_empty_ids(int p_id) {
+	Point* p;
+	bool p_exists = points.lookup(p_id, p);
+	ERR_FAIL_COND_V_MSG(!p_exists, PoolVector<int>(), vformat("Can't get if point has empty_ids. Point with id: %d doesn't exist.", p_id));
+
+	int size = p->empties.size();
+	PoolVector<int> ems;
+	ems.resize(size);
+	PoolVector<int>::Write w = ems.write();
+	PoolVector <Empty*>::Read r = p->empties.read();
+	for (int i = 0; i < size; i++) {
+		w[i] = r[i]->id;
+	}
+
+	return ems;
+}
+PoolVector<int> AStar::get_empties() {
+	PoolVector<int> e_ids;
+	for (OAHashMap<int, Empty*>::Iterator it = empties.iter(); it.valid; it = empties.next_iter(it)) {
+		int e_id = *it.key;
+		e_ids.append(e_id);
+	}
+
+	return e_ids;
+}
+
+
+
+void AStar::remove_empty(int e_id) {
+	Empty* e;
+	bool e_exists = empties.lookup(e_id, e);
+	ERR_FAIL_COND_MSG(!e_exists, vformat("Can't remove empty. Empty with id: %d doesn't exist.", e_id));
+
+
+	for (OAHashMap<int, Point*>::Iterator it = e->points.iter(); it.valid; it = e->points.next_iter(it)) {
+		Point* p = *it.value;
+		p->empties.empty();
+		p->on_empty_edge = false;
+
+	}
+
+	for (OAHashMap<int, Point*>::Iterator it = e->edge_points.iter(); it.valid; it = e->edge_points.next_iter(it)) {
+		Point* p = *it.value;
+		int i = p->empties.find(e);
+		p->empties.remove(i);
+		p->on_empty_edge = false;
+
+	}
+	memdelete(e);
+	empties.remove(e_id);
+	
+
 }
 
 void AStar::append_as_bulk_array(const PoolVector<real_t> &pool_points, int max_connections, const PoolVector<int> &pool_connections)
@@ -143,7 +494,7 @@ void AStar::set_as_bulk_array(const PoolVector<real_t> &pool_points, int max_con
 
 		ERR_FAIL_COND_MSG(p_id < 0, vformat("Can't add a point with negative id: %d.", p_id));
 		ERR_FAIL_COND_MSG(p_weight_scale < 0, vformat("Can't add a point with weight scale less than 0.0: %f.", p_weight_scale));
-		ERR_FAIL_INDEX_MSG(p_layers, 1 << 31 - 1, vformat("Can't add a point with layers value less than 0 or more than 2^31 - 1: %d.", p_layers));
+		ERR_FAIL_INDEX_MSG(p_layers, ((1 << 31) - 1), vformat("Can't add a point with layers value less than 0 or more than 2^31 - 1: %d.", p_layers));
 
 		Vector3 p_pos = Vector3(x, y, z);
 
@@ -219,6 +570,34 @@ void AStar::set_point_weight_scale(int p_id, real_t p_weight_scale) {
 	ERR_FAIL_COND_MSG(p_weight_scale < 0, vformat("Can't set point's weight scale less than 0.0: %f.", p_weight_scale));
 
 	p->weight_scale = p_weight_scale;
+
+	// if point is part of an empty, disable the empties it is a part of if weight scale is not equal to 1
+	int size = p->empties.size();
+	if (size > 0) {
+		PoolVector<Empty*>::Read r = p->empties.read();
+		for (int i = 0; i < size; i++) {
+
+			
+			Empty* e = r[i];
+
+			
+			
+
+			if (p->weight_scale != real_t(1)) {
+				e->weighted_points.append(p_id);
+			}
+			else {
+				int i = e->weighted_points.find(p_id);
+				e->weighted_points.remove(i);
+
+			}
+
+
+			// only enabled when containing no disabled points
+			e->enabled = e->weighted_points.size() == 0 && e->disabled_points.size() == 0;
+		}
+	}
+
 }
 
 void AStar::remove_point(int p_id) {
@@ -240,6 +619,21 @@ void AStar::remove_point(int p_id) {
 
 		(*it.value)->neighbours.remove(p->id);
 		(*it.value)->unlinked_neighbours.remove(p->id);
+	}
+
+	
+	//first fetch all e_ids to be removed
+	PoolVector<int> removal_arr;
+	PoolVector<Empty*>::Read r = p->empties.read();
+	for (int i = 0; i < p->empties.size(); i++) {
+		int e_id = r[i]->id;
+		removal_arr.append(e_id);
+
+	}
+
+	PoolVector<int>::Read r1 = removal_arr.read();
+	for (int i = 0; i < removal_arr.size(); i++) {
+		remove_empty(r1[i]);
 	}
 
 	memdelete(p);
@@ -474,7 +868,75 @@ bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers) {
 		open_list.remove(open_list.size() - 1);
 		p->closed_pass = pass; // Mark the point as closed
 
-		for (OAHashMap<int, Point *>::Iterator it = p->neighbours.iter(); it.valid; it = p->neighbours.next_iter(it)) {
+		//if the point is part of an empty, look through all of the edge points of said empty (as to skip over any points within the empty).
+		OAHashMap<int, Point*> connections;
+
+		PoolVector<Empty*> enabled_empties;
+		
+
+		int size = p->empties.size();
+		PoolVector<Empty*>::Read r = p->empties.read();
+		for (int i = 0; i < size; i++) {
+
+			
+			Empty* e = r[i];
+			
+
+			supported = relevant_layers == 0 || (relevant_layers & e->parallel_support_layers) > 0;
+			//if the empty is enabled and the end point is not within the empty
+			if (e->enabled && supported && !end_point->empties.has(e)) {
+				enabled_empties.append(e);
+				//can travel to any edge point
+				for (OAHashMap<int, Point*>::Iterator it = e->edge_points.iter(); it.valid; it = e->edge_points.next_iter(it)) {
+					int id = *it.key;
+					Point* ep = *(it.value);
+					ep->is_neighbour = false;
+					//don't connect to the same point 
+					if (id != p->id && (i == 0 || !connections.has(id))) {
+						connections.set(id, ep);
+					}
+
+				}
+			}
+
+		}
+
+		
+		
+		//add neighbours to connections
+		for (OAHashMap<int, Point*>::Iterator it = p->neighbours.iter(); it.valid; it = p->neighbours.next_iter(it)) {
+			int id = *it.key;
+			Point* np = *(it.value);// The neighbour point
+			np->is_neighbour = true;
+			//don't need to check for duplicate point connections if no empties
+			if (size == 0 || !connections.has(id)) {
+
+				//don't add points within enabled empties since they're meant to be skipped over
+				if (np->empties.size() > 0 && !np->on_empty_edge) {
+					bool in_enabled_empty = false;
+					PoolVector<Empty*>::Read r1 = np->empties.read();
+					for (int i = 0; i < np->empties.size(); i++) {
+						if (enabled_empties.has(r1[i])) {
+							in_enabled_empty = true;
+							break;
+						}
+					}
+					if (!in_enabled_empty) {
+						connections.set(id, np);
+					}
+				}
+				else {
+					connections.set(id, np);
+				}
+				
+
+			}
+		}
+		
+		
+
+
+		for (OAHashMap<int, Point *>::Iterator it = connections.iter(); it.valid; it = connections.next_iter(it)) {
 			Point *e = *(it.value); // The neighbour point
 
 			//make sure parallel layers are supported
@@ -499,6 +961,8 @@ bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers) {
 			}
 
 			e->prev_point = p;
+			e->prev_point_connected = e->is_neighbour;
+
 			e->g_score = tentative_g_score;
 			e->f_score = e->g_score + _estimate_cost(e->id, end_point->id);
 
@@ -563,7 +1027,7 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 	Point *begin_point = a;
 	Point *end_point = b;
 
-	ERR_FAIL_INDEX_V(relevant_layers, 1 << 31 - 1, PoolVector<Vector3>());
+	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31) - 1), PoolVector<Vector3>());
 
 	bool found_route = _solve(begin_point, end_point, relevant_layers);
 	if (!found_route) {
@@ -579,18 +1043,25 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 
 	PoolVector<Vector3> path;
 	path.resize(pc);
+	skipped_connections_of_last_path_array.empty();
+	skipped_connections_of_last_path_array.resize(pc);
 
 	{
 		PoolVector<Vector3>::Write w = path.write();
+		PoolVector<uint8_t>::Write w2 = skipped_connections_of_last_path_array.write();
 
 		Point *p2 = end_point;
 		int idx = pc - 1;
 		while (p2 != begin_point) {
-			w[idx--] = p2->pos;
+			w[idx] = p2->pos;
+			w2[idx--] = (p2->prev_point_connected ? 1:0);
 			p2 = p2->prev_point;
+
 		}
 
 		w[0] = p2->pos; // Assign first
+		w2[0] = 1;
+		
 	}
 
 	return path;
@@ -614,7 +1085,7 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 	Point *begin_point = a;
 	Point *end_point = b;
 
-	ERR_FAIL_INDEX_V(relevant_layers, 1 << 31 - 1, PoolVector<int>());
+	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31)-1), PoolVector<int>());
 
 	bool found_route = _solve(begin_point, end_point, relevant_layers);
 	if (!found_route) {
@@ -630,21 +1101,32 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 
 	PoolVector<int> path;
 	path.resize(pc);
+	skipped_connections_of_last_path_array.empty();
+	skipped_connections_of_last_path_array.resize(pc);
 
 	{
 		PoolVector<int>::Write w = path.write();
+		PoolVector<uint8_t>::Write w2 = skipped_connections_of_last_path_array.write();
+
 
 		p = end_point;
 		int idx = pc - 1;
 		while (p != begin_point) {
-			w[idx--] = p->id;
+			w[idx] = p->id;
+			w2[idx--] = (p->prev_point_connected ? 1:0);
 			p = p->prev_point;
 		}
 
 		w[0] = p->id; // Assign first
+		w2[0] = 1;
 	}
 
 	return path;
+}
+
+PoolVector<uint8_t> AStar::get_skipped_connections_of_last_path_array()
+{
+	return skipped_connections_of_last_path_array;
 }
 
 void AStar::set_point_disabled(int p_id, bool p_disabled) {
@@ -653,6 +1135,33 @@ void AStar::set_point_disabled(int p_id, bool p_disabled) {
 	ERR_FAIL_COND_MSG(!p_exists, vformat("Can't set if point is disabled. Point with id: %d doesn't exist.", p_id));
 
 	p->enabled = !p_disabled;
+
+	// if point is part of an empty, disable the empties it is a part of if it is disaled
+	int size = p->empties.size();
+	if (size > 0) {
+		PoolVector<Empty*>::Read r = p->empties.read();
+		for (int i = 0; i < size; i++) {
+
+
+			Empty* e = r[i];
+			
+			
+
+			if (p_disabled) {
+				e->disabled_points.append(p_id);
+			}
+			else {
+				int i = e->disabled_points.find(p_id);
+				e->disabled_points.remove(i);
+
+			}
+
+
+			// only enabled when containing no disabled points
+			e->enabled = e->weighted_points.size() == 0 && e->disabled_points.size() == 0;
+		}
+	}
+
 }
 
 bool AStar::is_point_disabled(int p_id) const {
@@ -682,6 +1191,25 @@ void AStar::set_point_layer(int p_id, int layer_index, bool l_enabled)
 	else {
 		p->parallel_support_layers = layers & (~(1 << layer_index));
 	}
+
+
+	
+
+	//changes to layers results in the removal of empties point is attached to, since it is no longer certain what layers are supported ater the change without looping through all the empty's points:
+	//first fetch all e_ids to be removed
+	PoolVector<int> removal_arr;
+	PoolVector<Empty*>::Read r = p->empties.read();
+	for (int i = 0; i < p->empties.size(); i++) {
+		int e_id = r[i]->id;
+		removal_arr.append(e_id);
+
+	}
+
+	PoolVector<int>::Read r1 = removal_arr.read();
+	for (int i = 0; i < removal_arr.size(); i++) {
+		remove_empty(r1[i]);
+	}
+
 }
 
 bool AStar::get_point_layer(int p_id,int layer_index) const
@@ -709,6 +1237,11 @@ int AStar::get_point_layers_value(int p_id) const
 void AStar::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_available_point_id"), &AStar::get_available_point_id);
 	ClassDB::bind_method(D_METHOD("add_point", "id", "position", "weight_scale","point_layers"), &AStar::add_point, DEFVAL(1.0), DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("add_empty", "id", "pool_points", "pool_edge_points"), &AStar::add_empty);
+	ClassDB::bind_method(D_METHOD("debug_empty", "id"), &AStar::debug_empty);
+	ClassDB::bind_method(D_METHOD("get_point_empty_ids", "id"), &AStar::get_point_empty_ids);
+	ClassDB::bind_method(D_METHOD("get_empties"), &AStar::get_empties);
+	ClassDB::bind_method(D_METHOD("remove_empty", "id"), &AStar::remove_empty);
 
 	ClassDB::bind_method(D_METHOD("append_as_bulk_array", "pool_points", "max_connections", "pool_connections"), &AStar::append_as_bulk_array);
 	ClassDB::bind_method(D_METHOD("set_as_bulk_array", "pool_points", "max_connections","pool_connections"), &AStar::set_as_bulk_array);
@@ -744,9 +1277,13 @@ void AStar::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_point_path", "from_id", "to_id", "relevant_layers"), &AStar::get_point_path, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("get_id_path", "from_id", "to_id", "relevant_layers"), &AStar::get_id_path, DEFVAL(0));
+	
+	ClassDB::bind_method(D_METHOD("get_skipped_connections_of_last_path_array"), &AStar::get_skipped_connections_of_last_path_array);
 
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_estimate_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_compute_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
+	
+
 }
 
 AStar::AStar() {

@@ -33,6 +33,7 @@
 
 #include "core/oa_hash_map.h"
 #include "core/reference.h"
+#include <tuple>
 
 /**
 	A* pathfinding algorithm
@@ -43,6 +44,8 @@
 class AStar : public Reference {
 	GDCLASS(AStar, Reference);
 	friend class AStar2D;
+
+	struct Empty;
 
 	struct Point {
 		Point() :
@@ -55,15 +58,40 @@ class AStar : public Reference {
 		bool enabled;
 		uint32_t parallel_support_layers;
 
+		//contains all empties that contain this point, only empty edge points can have multiple indexes
+		PoolVector<Empty *> empties;
+		bool on_empty_edge;
+
 		OAHashMap<int, Point *> neighbours;
 		OAHashMap<int, Point *> unlinked_neighbours;
 
 		// Used for pathfinding.
 		Point *prev_point;
+		bool prev_point_connected;
+		bool is_neighbour;
 		real_t g_score;
 		real_t f_score;
 		uint64_t open_pass;
 		uint64_t closed_pass;
+
+		
+	};
+
+	struct Empty {
+		int id;
+
+		bool enabled;
+		//if one or more points within the empty are disabled, the empty is disabled
+		PoolVector<int> disabled_points;
+		//if one or more points within the empty have an altered weight scale, the empty is disabled
+		PoolVector<int> weighted_points;
+		//what layers are able to use this empty
+		uint32_t parallel_support_layers;
+
+		//points within the empty
+		OAHashMap<int, Point*> points;
+		//points on the edge of the empty
+		OAHashMap<int, Point*> edge_points;
 	};
 
 	struct SortPoints {
@@ -117,6 +145,7 @@ class AStar : public Reference {
 	uint64_t pass;
 
 	OAHashMap<int, Point *> points;
+	OAHashMap<int, Empty *> empties;
 	Set<Segment> segments;
 
 	bool _solve(Point *begin_point, Point *end_point, int relevant_layers);
@@ -129,8 +158,17 @@ protected:
 
 public:
 	int get_available_point_id() const;
+	PoolVector<uint8_t> skipped_connections_of_last_path_array;
+
 
 	void add_point(int p_id, const Vector3& p_pos, real_t p_weight_scale = 1, int p_layers = 0);
+	void add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVector<int> &pool_edge_points);
+	void remove_empty(int e_id);
+
+	PoolVector<int> debug_empty(int e_id);
+	PoolVector<int> get_point_empty_ids(int p_id);
+	PoolVector<int> get_empties();
+
 	void append_as_bulk_array(const PoolVector<real_t> &pool_points , int max_connections, const PoolVector<int> &pool_connections);
 	void set_as_bulk_array(const PoolVector<real_t> &pool_points, int max_connections, const PoolVector<int> &pool_connections);
 
@@ -164,6 +202,8 @@ public:
 
 	PoolVector<Vector3> get_point_path(int p_from_id, int p_to_id, int relevant_layers = 0);
 	PoolVector<int> get_id_path(int p_from_id, int p_to_id, int relevant_layers = 0);
+
+	PoolVector<uint8_t> get_skipped_connections_of_last_path_array();
 
 	AStar();
 	~AStar();
