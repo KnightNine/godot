@@ -58,12 +58,10 @@ void AStar::add_point(int p_id, const Vector3 &p_pos, real_t p_weight_scale, int
 		Point *pt = memnew(Point);
 		pt->id = p_id;
 		pt->pos = p_pos;
-		pt->on_empty_edge = false;
 		pt->weight_scale = p_weight_scale;
 		pt->parallel_support_layers = p_layers;
+		pt->octant = nullptr;
 		pt->prev_point = nullptr;
-		pt->prev_point_connected = true;
-		pt->is_neighbour = false;
 		pt->open_pass = 0;
 		pt->closed_pass = 0;
 		pt->enabled = true;
@@ -76,39 +74,37 @@ void AStar::add_point(int p_id, const Vector3 &p_pos, real_t p_weight_scale, int
 
 
 
-void AStar::add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVector<int> &pool_edge_points) {
-	ERR_FAIL_COND_MSG(e_id < 0, vformat("Can't add a empty with negative id: %d.", e_id));
-	Empty *found_em;
-	bool e_exists = empties.lookup(e_id, found_em);
+void AStar::add_octant(int o_id, const PoolVector<int> &pool_points, const Vector3& o_pos, int center_point) {
+	ERR_FAIL_COND_MSG(o_id < 0, vformat("Can't add an octant with negative id: %d.", o_id));
+	Octant* found_oc;
+	bool o_exists = octants.lookup(o_id, found_oc);
 
 	uint32_t parallel_support_layers = 0;
 	PoolVector<int>::Read r = pool_points.read();
 	int size = pool_points.size();
-	ERR_FAIL_COND_MSG(size <= 0, vformat("Can't add a empty zero pool_points: %d.", e_id));
+	ERR_FAIL_COND_MSG(size <= 0, vformat("Can't add an octant with zero pool_points: %d.", o_id));
 	
-	int p_id = r[0];
-	Point* p;
-	bool p_exists = points.lookup(p_id, p);
-	if (p_exists) {
-		//use any pool point within points and subtract incongruencies from there
-		parallel_support_layers = p->parallel_support_layers;
-
-
-	}
+	
 	
 	
 	
 
 
-	//if placed overlapping with an existing empty's points, remove this empty
+	//if placed overlapping with an existing octant's points, remove this octant
 	bool invalid = false;
 	int invalid_type = 0;
 	int overlapping_p_id = 0;
 	
 
-	if (!e_exists) {
-		Empty* em = memnew(Empty);
-		em->id = e_id;
+	if (!o_exists) {
+		Octant* oc = memnew(Octant);
+		oc->id = o_id;
+		oc->pos = o_pos;
+		oc->weight_scale = 1;
+		oc->prev_octant = nullptr;
+		oc->open_pass = 0;
+		oc->closed_pass = 0;
+		oc->search_point = nullptr;
 
 		int size = pool_points.size();
 		
@@ -117,26 +113,31 @@ void AStar::add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVe
 			int p_id = r[i];
 			Point* p;
 			bool p_exists = points.lookup(p_id, p);
+
+			
+
+
 			if (p_exists) {
-				//this will remove layers that aren't supported across all points within the empty
-				parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
+				if (p_id == center_point) {
+					oc->origin = p;
+				}
+				//this will add layers that are supported within the octant
+				parallel_support_layers = p->parallel_support_layers | parallel_support_layers;
 
 
-				//cannot overlap with other empty points
-				if (p->empties.size() == 0) {
-					p->empties.append(em);
-					p->on_empty_edge = false;
-					em->points.set(p_id, p);
+				//cannot overlap with other octant points
+				if (p->octant == nullptr) {
+					p->octant = oc;
+					
+					oc->points.set(p_id, p);
 
 					
 
-					if (!p->enabled) {
-						em->disabled_points.append(p_id);
-					}
+					
 					if (p->weight_scale != real_t(1)) {
 						
-						em->weighted_points.append(p_id);
-						
+						oc->weighted_points.append(p_id);
+						oc->weight_scale += p->weight_scale - 1 / size;
 					}
 				}
 				else {
@@ -156,70 +157,31 @@ void AStar::add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVe
 
 		}
 
-		if (!invalid){
-
-			size = pool_edge_points.size();
-			PoolVector<int>::Read r2 = pool_edge_points.read();
-			for (int i = 0; i < size; i++) {
-
-				int p_id = r2[i];
-				Point* p;
-				bool p_exists = points.lookup(p_id, p);
-				if (p_exists) {
-
-					//this will remove layers that aren't supported across all points within the empty
-					parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
-
-					//only edges are allowed to overlap with other edges
-					if (p->empties.size() == 0 || p->on_empty_edge) {
-						p->empties.append(em);
-						p->on_empty_edge = true;
-						em->edge_points.set(p_id, p);
-
-						if (!p->enabled) {
-							em->disabled_points.append(p_id);
-						}
-						if (p->weight_scale != real_t(1)) {
-
-							em->weighted_points.append(p_id);
-
-						}
-					}
-					else {
-						invalid = true;
-						overlapping_p_id = p_id;
-						
-						break;
-					}
-				}
-				else {
-					invalid = true;
-					invalid_type = 1;
-					break;
-				}
-
-			}
+		
+		if (oc->origin == nullptr && !invalid) {
+			invalid = true;
+			invalid_type = 2;
 
 		}
+
 		
+		oc->parallel_support_layers = parallel_support_layers;
 
-		em->enabled = em->weighted_points.size() == 0  && em->disabled_points.size() == 0;
-		em->parallel_support_layers = parallel_support_layers;
-
-		empties.set(e_id, em);
+		octants.set(o_id, oc);
 	}
 	else {
-		//clear old points
-		for (OAHashMap<int, Point*>::Iterator it = found_em->points.iter(); it.valid; it = found_em->points.next_iter(it)) {
-			Point* p = *it.value;
-			p->empties.empty();
-			p->on_empty_edge = false;
 
+		found_oc->pos = o_pos;
+
+		//clear old points
+		for (OAHashMap<int, Point*>::Iterator it = found_oc->points.iter(); it.valid; it = found_oc->points.next_iter(it)) {
+			Point* p = *it.value;
+			p->octant = nullptr;
 		}
 
-		found_em->disabled_points.empty();
-
-		found_em->points.clear();
+		found_oc->points.clear();
+		found_oc->weight_scale = 1;
+		
 		int size = pool_points.size();
 		
 		for (int i = 0; i < size; i++) {
@@ -228,26 +190,28 @@ void AStar::add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVe
 			Point* p;
 			bool p_exists = points.lookup(p_id, p);
 			if (p_exists) {
-				//this will remove layers that aren't supported across all points within the empty
-				parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
+				if (p_id == center_point) {
+					found_oc->origin = p;
+				}
+				//this will add layers that are supported within the octant
+				parallel_support_layers = p->parallel_support_layers | parallel_support_layers;
 
-				//cannot overlap with other empty points
-				if (p->empties.size() == 0) {
-					p->empties.append(found_em);
-					p->on_empty_edge = false;
-					found_em->points.set(p_id, p);
+				//cannot overlap with other octant points
+				if (p->octant == nullptr) {
+					p->octant = found_oc;
+					
+					found_oc->points.set(p_id, p);
 
-					if (!p->enabled) {
-						found_em->disabled_points.append(p_id);
-					}
+					
 					if (p->weight_scale != real_t(1)) {
 
-						found_em->weighted_points.append(p_id);
-
+						found_oc->weighted_points.append(p_id);
+						found_oc->weight_scale += p->weight_scale - 1 / size;
 					}
 				}
 				else {
 					invalid = true;
+					overlapping_p_id = p_id;
 					break;
 				}
 
@@ -260,164 +224,118 @@ void AStar::add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVe
 
 		}
 
-		//clear old edge points
-		for (OAHashMap<int, Point*>::Iterator it = found_em->edge_points.iter(); it.valid; it = found_em->edge_points.next_iter(it)) {
-			Point* p = *it.value;
-			int i = p->empties.find(found_em);
-			p->empties.remove(i);
-			p->on_empty_edge = false;
+		if (found_oc->origin == nullptr && !invalid) {
+			invalid = true;
+			invalid_type = 2;
 
-		}
-
-		found_em->edge_points.clear();
-
-		if (!invalid) {
-			size = pool_edge_points.size();
-			PoolVector<int>::Read r2 = pool_edge_points.read();
-			for (int i = 0; i < size; i++) {
-
-				int p_id = r2[i];
-				Point* p;
-				bool p_exists = points.lookup(p_id, p);
-				if (p_exists) {
-					//this will remove layers that aren't supported across all points within the empty
-					parallel_support_layers = p->parallel_support_layers & parallel_support_layers;
-
-
-					//only edges are allowed to overlap with othwr edges
-					if (p->empties.size() == 0 || p->on_empty_edge) {
-						p->empties.append(found_em);
-						p->on_empty_edge = true;
-						found_em->edge_points.set(p_id, p);
-
-						if (!p->enabled) {
-							found_em->disabled_points.append(p_id);
-						}
-						if (p->weight_scale != real_t(1)) {
-
-							found_em->weighted_points.append(p_id);
-
-						}
-					}
-					else {
-						invalid = true;
-						break;
-					}
-				}
-				else {
-					invalid = true;
-					invalid_type = 1;
-					break;
-				}
-			
-
-			}
-			
 		}
 
 		
 		// only enabled when containing no disabled points or weighted points
-		found_em->enabled = found_em->weighted_points.size() == 0 && found_em->disabled_points.size() == 0;
-		found_em->parallel_support_layers = parallel_support_layers;
+		
+		found_oc->parallel_support_layers = parallel_support_layers;
 	}
 
 	if (invalid) {
 		
-		remove_empty(e_id);
+		remove_octant(o_id);
 
 		//usure how i would go about printing an error without cancelling the function
-		if (invalid_type == 1) {
-			ERR_FAIL_COND_MSG(invalid, vformat("empty placement of id %d contains points which do not exist and is therefore invalid and has been removed", e_id));
+		if (invalid_type == 2) {
+			ERR_FAIL_COND_MSG(invalid, vformat("octant placement of id %d does not contain the defined center_point and is therefore invalid and has been removed", o_id));
 		}
-		ERR_FAIL_COND_MSG(invalid, vformat("empty placement of id %d overlaps with another empty at point %d and is therefore invalid and has been removed", e_id, overlapping_p_id));
+
+		if (invalid_type == 1) {
+			ERR_FAIL_COND_MSG(invalid, vformat("octant placement of id %d contains points which do not exist and is therefore invalid and has been removed", o_id));
+		}
+		ERR_FAIL_COND_MSG(invalid, vformat("octant placement of id %d overlaps with another octant at point %d and is therefore invalid and has been removed", o_id, overlapping_p_id));
 	}
 
 }
 //returns int array 
-PoolVector<int> AStar::debug_empty(int e_id) {
-	Empty* e;
-	bool e_exists = empties.lookup(e_id, e);
-	ERR_FAIL_COND_V_MSG(!e_exists, PoolVector<int>(), vformat("Can't debug empty. Empty with id: %d doesn't exist.", e_id));
+PoolVector<int> AStar::debug_octant(int o_id) {
+	Octant* o;
+	bool o_exists = octants.lookup(o_id, o);
+	ERR_FAIL_COND_V_MSG(!o_exists, PoolVector<int>(), vformat("Can't debug octant. Octant with id: %d doesn't exist.", o_id));
 
-	//debug_data = [enabled(1 or 0),empty_layers,points_list_type,points_list]
+	//debug_data = [octant_layers,points_list]
 
 	PoolVector<int> debug_data;
-	int enabled = (e->enabled ? 1 : 0);
-	debug_data.append(enabled);
+	
 
-	int layers = e->parallel_support_layers;
+	int layers = o->parallel_support_layers;
 	debug_data.append(layers);
 
-	if (!e->enabled) {
+	
 		
-		if (e->weighted_points.size() > 0) {
-			debug_data.append(0); // 0 if weighted_points
-			PoolVector < int>::Read r = e->weighted_points.read();
-			for (int i = 0; i < e->weighted_points.size(); i++) {
-				debug_data.append(r[i]);
-			}
-		}
-		else if (e->disabled_points.size() > 0) {
-			debug_data.append(1); // 1 if disabled_point
-			PoolVector < int>::Read r = e->disabled_points.read();
-			for (int i = 0; i < e->disabled_points.size(); i++) {
-				debug_data.append(r[i]);
-			}
+	if (o->weighted_points.size() > 0) {
+		debug_data.append(0); // 0 if weighted_points
+		PoolVector < int>::Read r = o->weighted_points.read();
+		for (int i = 0; i < o->weighted_points.size(); i++) {
+			debug_data.append(r[i]);
 		}
 	}
+		
+	
 	return debug_data;
 	
 }
-PoolVector<int> AStar::get_point_empty_ids(int p_id) {
+int AStar::get_point_octant_id(int p_id) {
 	Point* p;
 	bool p_exists = points.lookup(p_id, p);
-	ERR_FAIL_COND_V_MSG(!p_exists, PoolVector<int>(), vformat("Can't get if point has empty_ids. Point with id: %d doesn't exist.", p_id));
+	ERR_FAIL_COND_V_MSG(!p_exists, -1, vformat("Can't get if point has octant_id. Point with id: %d doesn't exist.", p_id));
 
-	int size = p->empties.size();
-	PoolVector<int> ems;
-	ems.resize(size);
-	PoolVector<int>::Write w = ems.write();
-	PoolVector <Empty*>::Read r = p->empties.read();
-	for (int i = 0; i < size; i++) {
-		w[i] = r[i]->id;
+	Octant* o = p->octant;
+	if (o != nullptr) {
+		return o->id;
 	}
-
-	return ems;
+	return -1;
+	
 }
-PoolVector<int> AStar::get_empties() {
-	PoolVector<int> e_ids;
-	for (OAHashMap<int, Empty*>::Iterator it = empties.iter(); it.valid; it = empties.next_iter(it)) {
-		int e_id = *it.key;
-		e_ids.append(e_id);
+PoolVector<int> AStar::get_octants() {
+	PoolVector<int> o_ids;
+	for (OAHashMap<int, Octant*>::Iterator it = octants.iter(); it.valid; it = octants.next_iter(it)) {
+		int o_id = *it.key;
+		o_ids.append(o_id);
 	}
 
-	return e_ids;
+	return o_ids;
 }
 
 
 
-void AStar::remove_empty(int e_id) {
-	Empty* e;
-	bool e_exists = empties.lookup(e_id, e);
-	ERR_FAIL_COND_MSG(!e_exists, vformat("Can't remove empty. Empty with id: %d doesn't exist.", e_id));
+void AStar::remove_octant(int o_id) {
+	Octant* o;
+	bool o_exists = octants.lookup(o_id, o);
+	ERR_FAIL_COND_MSG(!o_exists, vformat("Can't remove octant. Octant with id: %d doesn't exist.", o_id));
 
 
-	for (OAHashMap<int, Point*>::Iterator it = e->points.iter(); it.valid; it = e->points.next_iter(it)) {
+	for (OAHashMap<int, Point*>::Iterator it = o->points.iter(); it.valid; it = o->points.next_iter(it)) {
 		Point* p = *it.value;
-		p->empties.empty();
-		p->on_empty_edge = false;
+		p->octant = nullptr;
+		
 
 	}
 
-	for (OAHashMap<int, Point*>::Iterator it = e->edge_points.iter(); it.valid; it = e->edge_points.next_iter(it)) {
-		Point* p = *it.value;
-		int i = p->empties.find(e);
-		p->empties.remove(i);
-		p->on_empty_edge = false;
+	for (OAHashMap<int, Octant*>::Iterator it = o->neighbours.iter(); it.valid; it = o->neighbours.next_iter(it)) {
+		Segment s(o_id, (*it.key));
+		oct_segments.erase(s);
 
+		(*it.value)->neighbours.remove(o->id);
+		(*it.value)->unlinked_neighbours.remove(o->id);
 	}
-	memdelete(e);
-	empties.remove(e_id);
+
+	for (OAHashMap<int, Octant*>::Iterator it = o->unlinked_neighbours.iter(); it.valid; it = o->unlinked_neighbours.next_iter(it)) {
+		Segment s(o_id, (*it.key));
+		oct_segments.erase(s);
+
+		(*it.value)->neighbours.remove(o->id);
+		(*it.value)->unlinked_neighbours.remove(o->id);
+	}
+
+	
+	memdelete(o);
+	octants.remove(o_id);
 	
 
 }
@@ -569,34 +487,36 @@ void AStar::set_point_weight_scale(int p_id, real_t p_weight_scale) {
 	ERR_FAIL_COND_MSG(!p_exists, vformat("Can't set point's weight scale. Point with id: %d doesn't exist.", p_id));
 	ERR_FAIL_COND_MSG(p_weight_scale < 0, vformat("Can't set point's weight scale less than 0.0: %f.", p_weight_scale));
 
+	int original_ws = p->weight_scale;
+
 	p->weight_scale = p_weight_scale;
 
-	// if point is part of an empty, disable the empties it is a part of if weight scale is not equal to 1
-	int size = p->empties.size();
-	if (size > 0) {
-		PoolVector<Empty*>::Read r = p->empties.read();
-		for (int i = 0; i < size; i++) {
-
+	// if point is part of an octant, adjust the octant's weight scale 
+	 
 			
-			Empty* e = r[i];
+	
 
 			
 			
+	if (p->octant != nullptr) {
+		Octant* o = p->octant;
+		o->weight_scale -= original_ws - 1;
 
-			if (p->weight_scale != real_t(1)) {
-				e->weighted_points.append(p_id);
-			}
-			else {
-				int i = e->weighted_points.find(p_id);
-				e->weighted_points.remove(i);
-
-			}
-
-
-			// only enabled when containing no disabled points
-			e->enabled = e->weighted_points.size() == 0 && e->disabled_points.size() == 0;
+		if (p->weight_scale != real_t(1)) {
+			o->weighted_points.append(p_id);
+			o->weight_scale += (p_weight_scale - 1) / o->points.get_num_elements();
 		}
+		else {
+			int i = o->weighted_points.find(p_id);
+			o->weighted_points.remove(i);
+
+		}
+		
 	}
+	
+
+
+	
 
 }
 
@@ -622,23 +542,54 @@ void AStar::remove_point(int p_id) {
 	}
 
 	
-	//first fetch all e_ids to be removed
-	PoolVector<int> removal_arr;
-	PoolVector<Empty*>::Read r = p->empties.read();
-	for (int i = 0; i < p->empties.size(); i++) {
-		int e_id = r[i]->id;
-		removal_arr.append(e_id);
+	//remove the octant if any
+	if (p->octant != nullptr) {
+		remove_octant(p->octant->id);
 
-	}
-
-	PoolVector<int>::Read r1 = removal_arr.read();
-	for (int i = 0; i < removal_arr.size(); i++) {
-		remove_empty(r1[i]);
 	}
 
 	memdelete(p);
 	points.remove(p_id);
 	last_free_id = p_id;
+}
+
+void AStar::connect_octants(int o_id, int o_with_id, bool bidirectional) {
+	ERR_FAIL_COND_MSG(o_id == o_with_id, vformat("Can't connect octant with id: %d to itself.", o_id));
+
+	Octant* a;
+	bool from_exists = octants.lookup(o_id, a);
+	ERR_FAIL_COND_MSG(!from_exists, vformat("Can't connect octants. Octant with id: %d doesn't exist.", o_id));
+
+	Octant* b;
+	bool to_exists = octants.lookup(o_with_id, b);
+	ERR_FAIL_COND_MSG(!to_exists, vformat("Can't connect octants. Octant with id: %d doesn't exist.", o_with_id));
+
+	a->neighbours.set(b->id, b);
+
+	if (bidirectional) {
+		b->neighbours.set(a->id, a);
+	}
+	else {
+		b->unlinked_neighbours.set(a->id, a);
+	}
+
+	Segment s(o_id, o_with_id);
+	if (bidirectional) {
+		s.direction = Segment::BIDIRECTIONAL;
+	}
+
+	Set<Segment>::Element* element = oct_segments.find(s);
+	if (element != nullptr) {
+		s.direction |= element->get().direction;
+		if (s.direction == Segment::BIDIRECTIONAL) {
+			// Both are neighbours of each other now
+			a->unlinked_neighbours.remove(b->id);
+			b->unlinked_neighbours.remove(a->id);
+		}
+		oct_segments.erase(element);
+	}
+
+	oct_segments.insert(s);
 }
 
 void AStar::connect_points(int p_id, int p_with_id, bool bidirectional) {
@@ -755,12 +706,26 @@ bool AStar::are_points_connected(int p_id, int p_with_id, bool bidirectional) co
 			(bidirectional || (element->get().direction & s.direction) == s.direction);
 }
 
+//note: this crashes if an id is -1
+bool AStar::are_octants_connected(int o_id, int o_with_id, bool bidirectional) const {
+	Segment s(o_id, o_with_id);
+	const Set<Segment>::Element* element = oct_segments.find(s);
+
+	return element != nullptr &&
+		(bidirectional || (element->get().direction & s.direction) == s.direction);
+}
+
+
 void AStar::clear() {
 	last_free_id = 0;
+	for (OAHashMap<int, Octant*>::Iterator it = octants.iter(); it.valid; it = octants.next_iter(it)) {
+		memdelete(*(it.value));
+	}
 	for (OAHashMap<int, Point *>::Iterator it = points.iter(); it.valid; it = points.next_iter(it)) {
 		memdelete(*(it.value));
 	}
 	segments.clear();
+	oct_segments.clear();
 	points.clear();
 }
 
@@ -837,8 +802,261 @@ Vector3 AStar::get_closest_position_in_segment(const Vector3 &p_point) const {
 	return closest_point;
 }
 
-bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers) {
+
+bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_layers) {
+	oct_pass++;
+
+
+
+	//make sure parallel layers are supported
+	// or if *relevant_layers is 0 then use all points
+	bool supported = relevant_layers == 0 || (relevant_layers & end_point->parallel_support_layers) > 0;
+	if (!end_point->enabled || !supported) {
+		return false;
+	}
+
+	bool found_route = false;
+
+	Vector<Octant*> oct_open_list;
+	SortArray<Octant*, SortOctants> oct_sorter;
+
+	
+
+	Octant* begin_octant = begin_point->octant;
+	begin_octant->search_point = begin_point;
+
+	Octant* end_octant = end_point->octant;
+
+
+	begin_octant->g_score = 0;
+	begin_octant->f_score = _estimate_octant_cost(begin_octant->id, end_octant->id);
+	begin_octant->prev_octant = nullptr;
+
+	oct_open_list.push_back(begin_octant);
+
+	while (!oct_open_list.empty()) {
+		Octant* o = oct_open_list[0]; // The currently processed octant
+
+		//this means the end point was reached as well,  
+		if (o == end_octant) {
+			found_route = true;
+			break;
+
+
+		}
+		
+
+		oct_sorter.pop_heap(0, oct_open_list.size(), oct_open_list.ptrw()); // Remove the current point from the open list
+		oct_open_list.remove(oct_open_list.size() - 1);
+		o->closed_pass = oct_pass; // Mark the octant as closed
+
+
+		
+
+
+
+
+
+
+		for (OAHashMap<int, Octant*>::Iterator it = o->neighbours.iter(); it.valid; it = o->neighbours.next_iter(it)) {
+			Octant* oe = *(it.value); // The neighbour octant
+
+			//make sure parallel layers are supported
+			// or if *relevant_layers is 0 then use all octants
+			supported = relevant_layers == 0 || (relevant_layers & oe->parallel_support_layers) > 0;
+
+			//check if the octant can be pathed to from the current position, using only points from o and oe
+			int connection;
+			int po_id = -1;
+			if (o->prev_octant != nullptr) {
+				po_id = o->prev_octant->id;
+			}
+
+			if (oe == end_octant) {
+				//if this is the end_octant, try to reach the end_point from the last octant in order for the octant connection to be valid
+				connection = _can_path(o->search_point, end_point, relevant_layers, o, oe,true, po_id);
+			}
+			else {
+				connection = _can_path(o->search_point, oe->origin, relevant_layers, o, oe,false, po_id);
+			}
+
+
+			if (oe->closed_pass == oct_pass || !supported || connection == -1) {
+				continue;
+			}
+			
+
+			
+
+			real_t tentative_g_score = o->g_score + _compute_cost(o->id, oe->id) * oe->weight_scale;
+
+			bool new_octant = false;
+
+			if (oe->open_pass != oct_pass) { // The point wasn't inside the open list.
+				oe->open_pass = oct_pass;
+				oct_open_list.push_back(oe);
+				new_octant = true;
+			}
+			else if (tentative_g_score >= oe->g_score) { // The new path is worse than the previous.
+				continue;
+			}
+
+			oe->prev_octant = o;
+
+			Point* search_point;
+			points.lookup(connection, search_point);
+			oe->search_point = search_point;
+
+			oe->g_score = tentative_g_score;
+			oe->f_score = oe->g_score + _estimate_cost(oe->id, end_octant->id);
+
+			if (new_octant) { // The position of the new points is already known.
+				oct_sorter.push_heap(0, oct_open_list.size() - 1, 0, oe, oct_open_list.ptrw());
+			}
+			else {
+				oct_sorter.push_heap(0, oct_open_list.find(oe), 0, oe, oct_open_list.ptrw());
+			}
+		}
+	}
+
+
+
+	return found_route;
+}
+
+
+int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id) {
 	pass++;
+
+	PoolVector<int> octants_list;
+	octants_list.append(begin_octant->id);
+	octants_list.append(end_octant->id);
+
+
+	
+
+	int found_point = -1;
+
+	Vector<Point*> open_list;
+	SortArray<Point*, SortPoints> sorter;
+
+	begin_point->g_score = 0;
+	begin_point->f_score = _estimate_cost(begin_point->id, end_point->id);
+	open_list.push_back(begin_point);
+
+	//if only 1 point in the octant, just check if that point is disabled or if it has any neighbors
+	if (end_octant->points.get_num_elements() == 1) {
+		for (OAHashMap<int, Point*>::Iterator it = end_octant->points.iter(); it.valid; it = end_octant->points.next_iter(it)) {
+			Point* x = *(it.value);
+			if (!x->enabled) {
+				return -1;
+			}
+			if (x->neighbours.get_num_elements() == 0) {
+				return -1;
+			}
+		}
+	}
+
+	while (!open_list.empty()) {
+		Point* p = open_list[0]; // The currently processed point
+
+		
+		bool in_end_octant = false;
+		
+		if (p->octant == end_octant) {
+			//try to reach the end point if true 
+			if (reach_end_point) {
+				if (p == end_point) {
+					found_point = p->id;
+					break;
+				}
+			}
+			else {
+				found_point = p->id;
+				break;
+			}
+			in_end_octant = true;
+
+
+		}
+		
+
+
+
+
+
+		sorter.pop_heap(0, open_list.size(), open_list.ptrw()); // Remove the current point from the open list
+		open_list.remove(open_list.size() - 1);
+		p->closed_pass = pass; // Mark the point as closed
+
+
+
+
+
+
+
+
+
+
+		for (OAHashMap<int, Point*>::Iterator it = p->neighbours.iter(); it.valid; it = p->neighbours.next_iter(it)) {
+			Point* e = *(it.value); // The neighbour point
+
+			//make sure parallel layers are supported
+			// or if *relevant_layers is 0 then use all points
+			bool supported = relevant_layers == 0 || (relevant_layers & e->parallel_support_layers) > 0;
+
+
+			if (!e->enabled || e->closed_pass == pass || !supported || !octants_list.has(p->octant->id)) {
+				continue;
+			}
+
+			real_t tentative_g_score = p->g_score + _compute_cost(p->id, e->id) * e->weight_scale;
+
+			bool new_point = false;
+
+			if (e->open_pass != pass) { // The point wasn't inside the open list.
+				e->open_pass = pass;
+				open_list.push_back(e);
+				new_point = true;
+			}
+			else if (tentative_g_score >= e->g_score) { // The new path is worse than the previous.
+				continue;
+			}
+
+			if (in_end_octant) {
+				e->octant_source_prev_point.set(begin_octant->id, p);
+			}
+			else {
+				e->octant_source_prev_point.set(prev_octant_id, p);
+			}
+			
+			e->prev_point = p;
+			
+
+			e->g_score = tentative_g_score;
+			e->f_score = e->g_score + _estimate_cost(e->id, end_point->id);
+
+			if (new_point) { // The position of the new points is already known.
+				sorter.push_heap(0, open_list.size() - 1, 0, e, open_list.ptrw());
+			}
+			else {
+				sorter.push_heap(0, open_list.find(e), 0, e, open_list.ptrw());
+			}
+		}
+	}
+
+	return found_point;
+}
+
+
+bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants) {
+	if (use_octants) {
+		return _octants_solve(begin_point, end_point, relevant_layers);
+	}
+
+	pass++;
+
+
 
 	//make sure parallel layers are supported
 	// or if *relevant_layers is 0 then use all points
@@ -868,75 +1086,16 @@ bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers) {
 		open_list.remove(open_list.size() - 1);
 		p->closed_pass = pass; // Mark the point as closed
 
-		//if the point is part of an empty, look through all of the edge points of said empty (as to skip over any points within the empty).
-		OAHashMap<int, Point*> connections;
-
-		PoolVector<Empty*> enabled_empties;
 		
 
-		int size = p->empties.size();
-		PoolVector<Empty*>::Read r = p->empties.read();
-		for (int i = 0; i < size; i++) {
-
-			
-			Empty* e = r[i];
-			
-
-			supported = relevant_layers == 0 || (relevant_layers & e->parallel_support_layers) > 0;
-			//if the empty is enabled and the end point is not within the empty
-			if (e->enabled && supported && !end_point->empties.has(e)) {
-				enabled_empties.append(e);
-				//can travel to any edge point
-				for (OAHashMap<int, Point*>::Iterator it = e->edge_points.iter(); it.valid; it = e->edge_points.next_iter(it)) {
-					int id = *it.key;
-					Point* ep = *(it.value);
-					ep->is_neighbour = false;
-					//don't connect to the same point 
-					if (id != p->id && (i == 0 || !connections.has(id))) {
-						connections.set(id, ep);
-					}
-
-				}
-			}
-
-		}
+		
 
 		
-		
-		//add neighbours to connections
-		for (OAHashMap<int, Point*>::Iterator it = p->neighbours.iter(); it.valid; it = p->neighbours.next_iter(it)) {
-			int id = *it.key;
-			Point* np = *(it.value);// The neighbour point
-			np->is_neighbour = true;
-			//don't need to check for duplicate point connections if no empties
-			if (size == 0 || !connections.has(id)) {
-
-				//don't add points within enabled empties since they're meant to be skipped over
-				if (np->empties.size() > 0 && !np->on_empty_edge) {
-					bool in_enabled_empty = false;
-					PoolVector<Empty*>::Read r1 = np->empties.read();
-					for (int i = 0; i < np->empties.size(); i++) {
-						if (enabled_empties.has(r1[i])) {
-							in_enabled_empty = true;
-							break;
-						}
-					}
-					if (!in_enabled_empty) {
-						connections.set(id, np);
-					}
-				}
-				else {
-					connections.set(id, np);
-				}
-				
-
-			}
-		}
 		
 		
 
 
-		for (OAHashMap<int, Point *>::Iterator it = connections.iter(); it.valid; it = connections.next_iter(it)) {
+		for (OAHashMap<int, Point *>::Iterator it = p->neighbours.iter(); it.valid; it = p->neighbours.next_iter(it)) {
 			Point *e = *(it.value); // The neighbour point
 
 			//make sure parallel layers are supported
@@ -961,7 +1120,7 @@ bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers) {
 			}
 
 			e->prev_point = p;
-			e->prev_point_connected = e->is_neighbour;
+			
 
 			e->g_score = tentative_g_score;
 			e->f_score = e->g_score + _estimate_cost(e->id, end_point->id);
@@ -993,6 +1152,23 @@ real_t AStar::_estimate_cost(int p_from_id, int p_to_id) {
 	return from_point->pos.distance_to(to_point->pos);
 }
 
+real_t AStar::_estimate_octant_cost(int o_from_id, int o_to_id) {
+	if (get_script_instance() && get_script_instance()->has_method(SceneStringNames::get_singleton()->_estimate_cost)) {
+		return get_script_instance()->call(SceneStringNames::get_singleton()->_estimate_octant_cost, o_from_id, o_to_id);
+	}
+
+	Octant* from_octant;
+	bool from_exists = octants.lookup(o_from_id, from_octant);
+	ERR_FAIL_COND_V_MSG(!from_exists, 0, vformat("Can't estimate cost. Octant with id: %d doesn't exist.", o_from_id));
+
+	Octant* to_octant;
+	bool to_exists = octants.lookup(o_to_id, to_octant);
+	ERR_FAIL_COND_V_MSG(!to_exists, 0, vformat("Can't estimate cost. Octant with id: %d doesn't exist.", o_to_id));
+
+	return from_octant->pos.distance_to(to_octant->pos);
+}
+
+
 real_t AStar::_compute_cost(int p_from_id, int p_to_id) {
 	if (get_script_instance() && get_script_instance()->has_method(SceneStringNames::get_singleton()->_compute_cost)) {
 		return get_script_instance()->call(SceneStringNames::get_singleton()->_compute_cost, p_from_id, p_to_id);
@@ -1009,7 +1185,7 @@ real_t AStar::_compute_cost(int p_from_id, int p_to_id) {
 	return from_point->pos.distance_to(to_point->pos);
 }
 
-PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int relevant_layers) {
+PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int relevant_layers, bool use_octants) {
 	Point *a;
 	bool from_exists = points.lookup(p_from_id, a);
 	ERR_FAIL_COND_V_MSG(!from_exists, PoolVector<Vector3>(), vformat("Can't get point path. Point with id: %d doesn't exist.", p_from_id));
@@ -1017,6 +1193,12 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 	Point *b;
 	bool to_exists = points.lookup(p_to_id, b);
 	ERR_FAIL_COND_V_MSG(!to_exists, PoolVector<Vector3>(), vformat("Can't get point path. Point with id: %d doesn't exist.", p_to_id));
+
+	if (use_octants) {
+		ERR_FAIL_COND_V_MSG(a->octant == nullptr, PoolVector<Vector3>(), vformat("Can't get point path. Point with id: %d isn't attached to an octant.", p_from_id));
+		ERR_FAIL_COND_V_MSG(b->octant == nullptr, PoolVector<Vector3>(), vformat("Can't get point path. Point with id: %d isn't attached to an octant.", p_to_id));
+
+	}
 
 	if (a == b) {
 		PoolVector<Vector3> ret;
@@ -1029,45 +1211,86 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 
 	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31) - 1), PoolVector<Vector3>());
 
-	bool found_route = _solve(begin_point, end_point, relevant_layers);
+	bool found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
 	if (!found_route) {
 		return PoolVector<Vector3>();
 	}
 
-	Point *p = end_point;
+	
 	int pc = 1; // Begin point
-	while (p != begin_point) {
-		pc++;
-		p = p->prev_point;
+	Point* p = end_point;
+
+	if (use_octants) {
+		Octant* end_octant = end_point->octant;
+		Octant* o = end_octant;
+		int oc = 1; // Begin octant
+
+		
+		
+
+		while (p != begin_point) {
+			oc++;
+			
+			Octant* po = o->prev_octant;
+			int po_id = -1;
+			if (po != nullptr) {
+				po_id = po->id;
+			}
+			while (p->octant == o && p != begin_point) {
+				pc++;
+				//find the prev point that is in the direction of the previous octant
+				Point* pp;
+				p->octant_source_prev_point.lookup(po_id, pp);
+
+				p->prev_point = pp;
+				p = pp;
+			}
+			
+
+
+			o = po;
+		}
+
+
+	}
+	else {
+		
+		while (p != begin_point) {
+			pc++;
+			p = p->prev_point;
+		}
+
+		
+		
 	}
 
 	PoolVector<Vector3> path;
 	path.resize(pc);
-	skipped_connections_of_last_path_array.empty();
-	skipped_connections_of_last_path_array.resize(pc);
+
 
 	{
 		PoolVector<Vector3>::Write w = path.write();
-		PoolVector<uint8_t>::Write w2 = skipped_connections_of_last_path_array.write();
 
-		Point *p2 = end_point;
+
+		Point* p2 = end_point;
 		int idx = pc - 1;
 		while (p2 != begin_point) {
-			w[idx] = p2->pos;
-			w2[idx--] = (p2->prev_point_connected ? 1:0);
+			w[idx--] = p2->pos;
+
 			p2 = p2->prev_point;
 
 		}
 
 		w[0] = p2->pos; // Assign first
-		w2[0] = 1;
-		
+
+
 	}
+	
 
 	return path;
 }
 
-PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_layers) {
+PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_layers, bool use_octants) {
 	Point *a;
 	bool from_exists = points.lookup(p_from_id, a);
 	ERR_FAIL_COND_V_MSG(!from_exists, PoolVector<int>(), vformat("Can't get id path. Point with id: %d doesn't exist.", p_from_id));
@@ -1075,6 +1298,12 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 	Point *b;
 	bool to_exists = points.lookup(p_to_id, b);
 	ERR_FAIL_COND_V_MSG(!to_exists, PoolVector<int>(), vformat("Can't get id path. Point with id: %d doesn't exist.", p_to_id));
+
+	if (use_octants) {
+		ERR_FAIL_COND_V_MSG(a->octant == nullptr, PoolVector<int>(), vformat("Can't get point path. Point with id: %d isn't attached to an octant.", p_from_id));
+		ERR_FAIL_COND_V_MSG(b->octant == nullptr, PoolVector<int>(), vformat("Can't get point path. Point with id: %d doesn't exist.", p_to_id));
+
+	}
 
 	if (a == b) {
 		PoolVector<int> ret;
@@ -1087,47 +1316,83 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 
 	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31)-1), PoolVector<int>());
 
-	bool found_route = _solve(begin_point, end_point, relevant_layers);
+	bool found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
 	if (!found_route) {
 		return PoolVector<int>();
 	}
 
-	Point *p = end_point;
+
+
+
+	
 	int pc = 1; // Begin point
-	while (p != begin_point) {
-		pc++;
-		p = p->prev_point;
+	Point* p = end_point;
+
+	if (use_octants) {
+		Octant* end_octant = end_point->octant;
+		Octant* o = end_octant;
+		int oc = 1; // Begin octant
+
+
+
+
+		while (p != begin_point) {
+			oc++;
+
+			Octant* po = o->prev_octant;
+			int po_id = -1;
+			if (po != nullptr) {
+				po_id = po->id;
+			}
+			while (p->octant == o && p != begin_point) {
+				pc++;
+				//find the prev point that is in the direction of the previous octant
+				Point* pp;
+				p->octant_source_prev_point.lookup(po_id, pp);
+
+				p->prev_point = pp;
+				p = pp;
+			}
+
+
+
+			o = po;
+		}
+
+
+	}
+	else {
+		while (p != begin_point) {
+			pc++;
+			p = p->prev_point;
+		}
 	}
 
 	PoolVector<int> path;
 	path.resize(pc);
-	skipped_connections_of_last_path_array.empty();
-	skipped_connections_of_last_path_array.resize(pc);
+	
 
 	{
 		PoolVector<int>::Write w = path.write();
-		PoolVector<uint8_t>::Write w2 = skipped_connections_of_last_path_array.write();
+		
 
 
 		p = end_point;
 		int idx = pc - 1;
 		while (p != begin_point) {
-			w[idx] = p->id;
-			w2[idx--] = (p->prev_point_connected ? 1:0);
+			w[idx--] = p->id;
+			
 			p = p->prev_point;
 		}
 
 		w[0] = p->id; // Assign first
-		w2[0] = 1;
+		
 	}
 
 	return path;
 }
 
-PoolVector<uint8_t> AStar::get_skipped_connections_of_last_path_array()
-{
-	return skipped_connections_of_last_path_array;
-}
+
 
 void AStar::set_point_disabled(int p_id, bool p_disabled) {
 	Point *p;
@@ -1136,31 +1401,7 @@ void AStar::set_point_disabled(int p_id, bool p_disabled) {
 
 	p->enabled = !p_disabled;
 
-	// if point is part of an empty, disable the empties it is a part of if it is disaled
-	int size = p->empties.size();
-	if (size > 0) {
-		PoolVector<Empty*>::Read r = p->empties.read();
-		for (int i = 0; i < size; i++) {
-
-
-			Empty* e = r[i];
-			
-			
-
-			if (p_disabled) {
-				e->disabled_points.append(p_id);
-			}
-			else {
-				int i = e->disabled_points.find(p_id);
-				e->disabled_points.remove(i);
-
-			}
-
-
-			// only enabled when containing no disabled points
-			e->enabled = e->weighted_points.size() == 0 && e->disabled_points.size() == 0;
-		}
-	}
+	
 
 }
 
@@ -1195,19 +1436,11 @@ void AStar::set_point_layer(int p_id, int layer_index, bool l_enabled)
 
 	
 
-	//changes to layers results in the removal of empties point is attached to, since it is no longer certain what layers are supported ater the change without looping through all the empty's points:
-	//first fetch all e_ids to be removed
-	PoolVector<int> removal_arr;
-	PoolVector<Empty*>::Read r = p->empties.read();
-	for (int i = 0; i < p->empties.size(); i++) {
-		int e_id = r[i]->id;
-		removal_arr.append(e_id);
+	//changes to layers results in the removal of octant point is attached to, since it is no longer certain what layers are supported ater the change without looping through all the octant's points:
+	//remove the octant if any
+	if (p->octant != nullptr) {
+		remove_octant(p->octant->id);
 
-	}
-
-	PoolVector<int>::Read r1 = removal_arr.read();
-	for (int i = 0; i < removal_arr.size(); i++) {
-		remove_empty(r1[i]);
 	}
 
 }
@@ -1237,11 +1470,11 @@ int AStar::get_point_layers_value(int p_id) const
 void AStar::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_available_point_id"), &AStar::get_available_point_id);
 	ClassDB::bind_method(D_METHOD("add_point", "id", "position", "weight_scale","point_layers"), &AStar::add_point, DEFVAL(1.0), DEFVAL(0));
-	ClassDB::bind_method(D_METHOD("add_empty", "id", "pool_points", "pool_edge_points"), &AStar::add_empty);
-	ClassDB::bind_method(D_METHOD("debug_empty", "id"), &AStar::debug_empty);
-	ClassDB::bind_method(D_METHOD("get_point_empty_ids", "id"), &AStar::get_point_empty_ids);
-	ClassDB::bind_method(D_METHOD("get_empties"), &AStar::get_empties);
-	ClassDB::bind_method(D_METHOD("remove_empty", "id"), &AStar::remove_empty);
+	ClassDB::bind_method(D_METHOD("add_octant", "id", "pool_points", "pos","center_point"), &AStar::add_octant);
+	ClassDB::bind_method(D_METHOD("debug_octant", "id"), &AStar::debug_octant);
+	ClassDB::bind_method(D_METHOD("get_point_octant_id", "id"), &AStar::get_point_octant_id);
+	ClassDB::bind_method(D_METHOD("get_octants"), &AStar::get_octants);
+	ClassDB::bind_method(D_METHOD("remove_octant", "id"), &AStar::remove_octant);
 
 	ClassDB::bind_method(D_METHOD("append_as_bulk_array", "pool_points", "max_connections", "pool_connections"), &AStar::append_as_bulk_array);
 	ClassDB::bind_method(D_METHOD("set_as_bulk_array", "pool_points", "max_connections","pool_connections"), &AStar::set_as_bulk_array);
@@ -1264,8 +1497,11 @@ void AStar::_bind_methods() {
 	
 
 	ClassDB::bind_method(D_METHOD("connect_points", "id", "to_id", "bidirectional"), &AStar::connect_points, DEFVAL(true));
+	ClassDB::bind_method(D_METHOD("connect_octants", "id", "to_id", "bidirectional"), &AStar::connect_octants, DEFVAL(true));
+
 	ClassDB::bind_method(D_METHOD("disconnect_points", "id", "to_id", "bidirectional"), &AStar::disconnect_points, DEFVAL(true));
 	ClassDB::bind_method(D_METHOD("are_points_connected", "id", "to_id", "bidirectional"), &AStar::are_points_connected, DEFVAL(true));
+	ClassDB::bind_method(D_METHOD("are_octants_connected", "id", "to_id", "bidirectional"), &AStar::are_octants_connected, DEFVAL(true));
 
 	ClassDB::bind_method(D_METHOD("get_point_count"), &AStar::get_point_count);
 	ClassDB::bind_method(D_METHOD("get_point_capacity"), &AStar::get_point_capacity);
@@ -1275,12 +1511,13 @@ void AStar::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_closest_point", "to_position", "include_disabled","relevant_layers"), &AStar::get_closest_point, DEFVAL(false), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("get_closest_position_in_segment", "to_position"), &AStar::get_closest_position_in_segment);
 
-	ClassDB::bind_method(D_METHOD("get_point_path", "from_id", "to_id", "relevant_layers"), &AStar::get_point_path, DEFVAL(0));
-	ClassDB::bind_method(D_METHOD("get_id_path", "from_id", "to_id", "relevant_layers"), &AStar::get_id_path, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("get_point_path", "from_id", "to_id", "relevant_layers","use_octants"), &AStar::get_point_path, DEFVAL(0),DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("get_id_path", "from_id", "to_id", "relevant_layers", "use_octants"), &AStar::get_id_path, DEFVAL(0), DEFVAL(false));
 	
-	ClassDB::bind_method(D_METHOD("get_skipped_connections_of_last_path_array"), &AStar::get_skipped_connections_of_last_path_array);
+	
 
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_estimate_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
+	BIND_VMETHOD(MethodInfo(Variant::REAL, "_estimate_octant_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_compute_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
 	
 

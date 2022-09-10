@@ -45,7 +45,7 @@ class AStar : public Reference {
 	GDCLASS(AStar, Reference);
 	friend class AStar2D;
 
-	struct Empty;
+	struct Octant;
 
 	struct Point {
 		Point() :
@@ -58,17 +58,16 @@ class AStar : public Reference {
 		bool enabled;
 		uint32_t parallel_support_layers;
 
-		//contains all empties that contain this point, only empty edge points can have multiple indexes
-		PoolVector<Empty *> empties;
-		bool on_empty_edge;
+		//the octant this coord is within
+		Octant* octant;
+		
 
 		OAHashMap<int, Point *> neighbours;
 		OAHashMap<int, Point *> unlinked_neighbours;
 
 		// Used for pathfinding.
 		Point *prev_point;
-		bool prev_point_connected;
-		bool is_neighbour;
+		OAHashMap<int, Point*> octant_source_prev_point;
 		real_t g_score;
 		real_t f_score;
 		uint64_t open_pass;
@@ -77,21 +76,40 @@ class AStar : public Reference {
 		
 	};
 
-	struct Empty {
-		int id;
+	struct Octant {
 
-		bool enabled;
-		//if one or more points within the empty are disabled, the empty is disabled
-		PoolVector<int> disabled_points;
-		//if one or more points within the empty have an altered weight scale, the empty is disabled
+		Octant() :
+			neighbours(4u),
+			unlinked_neighbours(4u) {}
+
+		int id;
+		Point* origin;
+		Vector3 pos;
+
+		OAHashMap<int, Octant*> neighbours;
+		OAHashMap<int, Octant*> unlinked_neighbours;
+
+
+		//points within the Octant that have an altered weight scale
 		PoolVector<int> weighted_points;
-		//what layers are able to use this empty
+		
+		real_t weight_scale;
+
+		//what layers are able to use this Octant
 		uint32_t parallel_support_layers;
 
-		//points within the empty
+		//points within the octant
 		OAHashMap<int, Point*> points;
-		//points on the edge of the empty
-		OAHashMap<int, Point*> edge_points;
+
+
+		// Used for pathfinding.
+		Octant* prev_octant;
+		real_t g_score;
+		real_t f_score;
+		uint64_t open_pass;
+		uint64_t closed_pass;
+		Point* search_point;
+		
 	};
 
 	struct SortPoints {
@@ -101,6 +119,19 @@ class AStar : public Reference {
 			} else if (A->f_score < B->f_score) {
 				return false;
 			} else {
+				return A->g_score < B->g_score; // If the f_costs are the same then prioritize the points that are further away from the start.
+			}
+		}
+	};
+	struct SortOctants {
+		_FORCE_INLINE_ bool operator()(const Octant* A, const Octant* B) const { // Returns true when the Point A is worse than Point B.
+			if (A->f_score > B->f_score) {
+				return true;
+			}
+			else if (A->f_score < B->f_score) {
+				return false;
+			}
+			else {
 				return A->g_score < B->g_score; // If the f_costs are the same then prioritize the points that are further away from the start.
 			}
 		}
@@ -143,31 +174,36 @@ class AStar : public Reference {
 
 	int last_free_id;
 	uint64_t pass;
+	uint64_t oct_pass;
 
 	OAHashMap<int, Point *> points;
-	OAHashMap<int, Empty *> empties;
+	OAHashMap<int, Octant *> octants;
 	Set<Segment> segments;
+	Set<Segment> oct_segments;
 
-	bool _solve(Point *begin_point, Point *end_point, int relevant_layers);
+	bool _solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants);
+	bool _octants_solve(Point* begin_point, Point* end_point, int relevant_layers);
+	int _can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id);
 
 protected:
 	static void _bind_methods();
 
 	virtual real_t _estimate_cost(int p_from_id, int p_to_id);
 	virtual real_t _compute_cost(int p_from_id, int p_to_id);
+	virtual real_t _estimate_octant_cost(int o_from_id, int o_to_id);
 
 public:
 	int get_available_point_id() const;
-	PoolVector<uint8_t> skipped_connections_of_last_path_array;
+	
 
 
 	void add_point(int p_id, const Vector3& p_pos, real_t p_weight_scale = 1, int p_layers = 0);
-	void add_empty(int e_id, const PoolVector<int> &pool_points, const PoolVector<int> &pool_edge_points);
-	void remove_empty(int e_id);
+	void add_octant(int o_id, const PoolVector<int> &pool_points, const Vector3& o_pos, int center_point);
+	void remove_octant(int o_id);
 
-	PoolVector<int> debug_empty(int e_id);
-	PoolVector<int> get_point_empty_ids(int p_id);
-	PoolVector<int> get_empties();
+	PoolVector<int> debug_octant(int o_id);
+	int get_point_octant_id(int p_id);
+	PoolVector<int> get_octants();
 
 	void append_as_bulk_array(const PoolVector<real_t> &pool_points , int max_connections, const PoolVector<int> &pool_connections);
 	void set_as_bulk_array(const PoolVector<real_t> &pool_points, int max_connections, const PoolVector<int> &pool_connections);
@@ -188,9 +224,11 @@ public:
 	bool get_point_layer(int p_id,int layer_index) const;
 	int get_point_layers_value(int p_id) const;
 
+	void connect_octants(int o_id, int o_with_id, bool bidirectional = true);
 	void connect_points(int p_id, int p_with_id, bool bidirectional = true);
 	void disconnect_points(int p_id, int p_with_id, bool bidirectional = true);
 	bool are_points_connected(int p_id, int p_with_id, bool bidirectional = true) const;
+	bool are_octants_connected(int o_id, int o_with_id, bool bidirectional = true) const;
 
 	int get_point_count() const;
 	int get_point_capacity() const;
@@ -200,8 +238,8 @@ public:
 	int get_closest_point(const Vector3 &p_point, bool p_include_disabled = false, int relevant_layers = 0) const;
 	Vector3 get_closest_position_in_segment(const Vector3 &p_point) const;
 
-	PoolVector<Vector3> get_point_path(int p_from_id, int p_to_id, int relevant_layers = 0);
-	PoolVector<int> get_id_path(int p_from_id, int p_to_id, int relevant_layers = 0);
+	PoolVector<Vector3> get_point_path(int p_from_id, int p_to_id, int relevant_layers = 0, bool use_octants = false);
+	PoolVector<int> get_id_path(int p_from_id, int p_to_id, int relevant_layers = 0, bool use_octants = false);
 
 	PoolVector<uint8_t> get_skipped_connections_of_last_path_array();
 
