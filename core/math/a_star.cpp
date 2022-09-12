@@ -30,9 +30,12 @@
 
 #include "a_star.h"
 
+
+
 #include "core/math/geometry.h"
 #include "core/script_language.h"
 #include "scene/scene_string_names.h"
+#include <string> 
 
 int AStar::get_available_point_id() const {
 	if (points.has(last_free_id)) {
@@ -105,6 +108,7 @@ void AStar::add_octant(int o_id, const PoolVector<int> &pool_points, const Vecto
 		oc->open_pass = 0;
 		oc->closed_pass = 0;
 		oc->search_point = nullptr;
+		oc->origin = nullptr;
 
 		int size = pool_points.size();
 		
@@ -172,7 +176,7 @@ void AStar::add_octant(int o_id, const PoolVector<int> &pool_points, const Vecto
 	else {
 
 		found_oc->pos = o_pos;
-
+		found_oc->origin = nullptr;
 		//clear old points
 		for (OAHashMap<int, Point*>::Iterator it = found_oc->points.iter(); it.valid; it = found_oc->points.next_iter(it)) {
 			Point* p = *it.value;
@@ -421,6 +425,7 @@ void AStar::set_as_bulk_array(const PoolVector<real_t> &pool_points, int max_con
 		pt->pos = p_pos;
 		pt->weight_scale = p_weight_scale;
 		pt->parallel_support_layers = p_layers;
+		pt->octant = nullptr;
 		pt->prev_point = nullptr;
 		pt->open_pass = 0;
 		pt->closed_pass = 0;
@@ -805,7 +810,7 @@ Vector3 AStar::get_closest_position_in_segment(const Vector3 &p_point) const {
 
 bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_layers) {
 	oct_pass++;
-
+	
 
 
 	//make sure parallel layers are supported
@@ -826,7 +831,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 	begin_octant->search_point = begin_point;
 
 	Octant* end_octant = end_point->octant;
-
+	ERR_PRINT(vformat("	pathing from: %d to: %d", begin_octant->id, end_octant->id));
 
 	begin_octant->g_score = 0;
 	begin_octant->f_score = _estimate_octant_cost(begin_octant->id, end_octant->id);
@@ -834,16 +839,14 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 	oct_open_list.push_back(begin_octant);
 
+
+
 	while (!oct_open_list.empty()) {
 		Octant* o = oct_open_list[0]; // The currently processed octant
-
-		//this means the end point was reached as well,  
-		if (o == end_octant) {
-			found_route = true;
-			break;
-
-
-		}
+		
+		//ERR_PRINT(vformat("running through octant of index %d.", o->id));
+		
+		
 		
 
 		oct_sorter.pop_heap(0, oct_open_list.size(), oct_open_list.ptrw()); // Remove the current point from the open list
@@ -853,6 +856,44 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 		
 
+		
+		if (o->prev_octant != nullptr) {
+			//try pathing to this octant (after sorting the neighbors, in order to minimize the number of checks needed)
+			int connection;
+
+			int ppo_id = -1;
+			if (o->prev_octant->prev_octant != nullptr) {
+				ppo_id = o->prev_octant->prev_octant->id;
+			}
+				
+
+			if (o == end_octant) {
+				//if this is the end_octant, reaching the end_point from the last octant is required in order for the octant connection to be valid
+				connection = _can_path(o->prev_octant->search_point, end_point, relevant_layers, o->prev_octant, o, true, ppo_id);
+			}
+			else {
+				connection = _can_path(o->prev_octant->search_point, o->origin, relevant_layers, o->prev_octant, o, false, ppo_id);
+			}
+			//ERR_PRINT(vformat("	octant connection is %s", connection ? "T" : "F"));
+			//if no connection can be made to this octant, skip to the next most viable octant
+			if (connection== -1) {
+				continue;
+			}
+			else {
+				//set search point that will be used as the entrance to this octant
+				Point* search_point;
+				points.lookup(connection, search_point);
+				o->search_point = search_point;
+			}
+		}
+
+		//this means the end point was reached as well,  
+		if (o == end_octant) {
+			found_route = true;
+			break;
+
+
+		}
 
 
 
@@ -861,34 +902,25 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 		for (OAHashMap<int, Octant*>::Iterator it = o->neighbours.iter(); it.valid; it = o->neighbours.next_iter(it)) {
 			Octant* oe = *(it.value); // The neighbour octant
 
-			//make sure parallel layers are supported
+			//make sure parallel layers are supported within coords of the octant
 			// or if *relevant_layers is 0 then use all octants
 			supported = relevant_layers == 0 || (relevant_layers & oe->parallel_support_layers) > 0;
 
 			//check if the octant can be pathed to from the current position, using only points from o and oe
-			int connection;
-			int po_id = -1;
-			if (o->prev_octant != nullptr) {
-				po_id = o->prev_octant->id;
-			}
+			
+			
 
-			if (oe == end_octant) {
-				//if this is the end_octant, try to reach the end_point from the last octant in order for the octant connection to be valid
-				connection = _can_path(o->search_point, end_point, relevant_layers, o, oe,true, po_id);
-			}
-			else {
-				connection = _can_path(o->search_point, oe->origin, relevant_layers, o, oe,false, po_id);
-			}
+			
+			//ERR_PRINT(vformat("		testing neighbor %d: supported is %s, closed is %s",oe->id,  supported?"T":"F",(oe->closed_pass == oct_pass) ? "T" : "F"));
 
-
-			if (oe->closed_pass == oct_pass || !supported || connection == -1) {
+			if (oe->closed_pass == oct_pass || !supported) {
 				continue;
 			}
 			
 
 			
 
-			real_t tentative_g_score = o->g_score + _compute_cost(o->id, oe->id) * oe->weight_scale;
+			real_t tentative_g_score = o->g_score + _compute_octant_cost(o->id, oe->id) * oe->weight_scale;
 
 			bool new_octant = false;
 
@@ -903,12 +935,10 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 			oe->prev_octant = o;
 
-			Point* search_point;
-			points.lookup(connection, search_point);
-			oe->search_point = search_point;
+			
 
 			oe->g_score = tentative_g_score;
-			oe->f_score = oe->g_score + _estimate_cost(oe->id, end_octant->id);
+			oe->f_score = oe->g_score + _estimate_octant_cost(oe->id, end_octant->id);
 
 			if (new_octant) { // The position of the new points is already known.
 				oct_sorter.push_heap(0, oct_open_list.size() - 1, 0, oe, oct_open_list.ptrw());
@@ -926,6 +956,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 
 int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id) {
+	//prev_octant_id is the id of the octant before the begin octant
 	pass++;
 
 	PoolVector<int> octants_list;
@@ -944,7 +975,7 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 	begin_point->f_score = _estimate_cost(begin_point->id, end_point->id);
 	open_list.push_back(begin_point);
 
-	//if only 1 point in the octant, just check if that point is disabled or if it has any neighbors
+	//if only 1 point in the octant, just check if that point is disabled or if it has no neighbors
 	if (end_octant->points.get_num_elements() == 1) {
 		for (OAHashMap<int, Point*>::Iterator it = end_octant->points.iter(); it.valid; it = end_octant->points.next_iter(it)) {
 			Point* x = *(it.value);
@@ -961,7 +992,7 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 		Point* p = open_list[0]; // The currently processed point
 
 		
-		bool in_end_octant = false;
+		
 		
 		if (p->octant == end_octant) {
 			//try to reach the end point if true 
@@ -975,7 +1006,7 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 				found_point = p->id;
 				break;
 			}
-			in_end_octant = true;
+			
 
 
 		}
@@ -1022,8 +1053,8 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 			else if (tentative_g_score >= e->g_score) { // The new path is worse than the previous.
 				continue;
 			}
-
-			if (in_end_octant) {
+			//point back to the previous octant
+			if (e->octant == end_octant) {
 				e->octant_source_prev_point.set(begin_octant->id, p);
 			}
 			else {
@@ -1185,6 +1216,22 @@ real_t AStar::_compute_cost(int p_from_id, int p_to_id) {
 	return from_point->pos.distance_to(to_point->pos);
 }
 
+real_t AStar::_compute_octant_cost(int o_from_id, int o_to_id) {
+	if (get_script_instance() && get_script_instance()->has_method(SceneStringNames::get_singleton()->_compute_octant_cost)) {
+		return get_script_instance()->call(SceneStringNames::get_singleton()->_compute_octant_cost, o_from_id, o_to_id);
+	}
+
+	Octant* from_octant;
+	bool from_exists = octants.lookup(o_from_id, from_octant);
+	ERR_FAIL_COND_V_MSG(!from_exists, 0, vformat("Can't compute cost. Octant with id: %d doesn't exist.", o_from_id));
+
+	Octant* to_octant;
+	bool to_exists = octants.lookup(o_to_id, to_octant);
+	ERR_FAIL_COND_V_MSG(!to_exists, 0, vformat("Can't compute cost. Octant with id: %d doesn't exist.", o_to_id));
+
+	return from_octant->pos.distance_to(to_octant->pos);
+}
+
 PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int relevant_layers, bool use_octants) {
 	Point *a;
 	bool from_exists = points.lookup(p_from_id, a);
@@ -1215,7 +1262,7 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 	if (!found_route) {
 		return PoolVector<Vector3>();
 	}
-
+	
 	
 	int pc = 1; // Begin point
 	Point* p = end_point;
@@ -1240,8 +1287,9 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 				pc++;
 				//find the prev point that is in the direction of the previous octant
 				Point* pp;
-				p->octant_source_prev_point.lookup(po_id, pp);
-
+				bool pp_exists = p->octant_source_prev_point.lookup(po_id, pp);
+				p->octant_source_prev_point.clear();
+				ERR_PRINT(vformat("in p %d pp_exists %s", p->id, pp_exists?"T":"F"));
 				p->prev_point = pp;
 				p = pp;
 			}
@@ -1349,6 +1397,7 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 				//find the prev point that is in the direction of the previous octant
 				Point* pp;
 				p->octant_source_prev_point.lookup(po_id, pp);
+				p->octant_source_prev_point.clear();
 
 				p->prev_point = pp;
 				p = pp;
@@ -1519,7 +1568,7 @@ void AStar::_bind_methods() {
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_estimate_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_estimate_octant_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_compute_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
-	
+	BIND_VMETHOD(MethodInfo(Variant::REAL, "_compute_octant_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
 
 }
 

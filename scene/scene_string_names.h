@@ -53,6 +53,7 @@ public:
 	StringName _estimate_cost;
 	StringName _estimate_octant_cost;
 	StringName _compute_cost;
+	StringName _compute_octant_cost;
 
 	StringName resized;
 	StringName dot;

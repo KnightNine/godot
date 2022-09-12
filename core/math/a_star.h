@@ -181,6 +181,9 @@ class AStar : public Reference {
 	Set<Segment> segments;
 	Set<Segment> oct_segments;
 
+	
+	
+
 	bool _solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants);
 	bool _octants_solve(Point* begin_point, Point* end_point, int relevant_layers);
 	int _can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id);
@@ -190,6 +193,7 @@ protected:
 
 	virtual real_t _estimate_cost(int p_from_id, int p_to_id);
 	virtual real_t _compute_cost(int p_from_id, int p_to_id);
+	virtual real_t _compute_octant_cost(int o_from_id, int o_to_id);
 	virtual real_t _estimate_octant_cost(int o_from_id, int o_to_id);
 
 public:
