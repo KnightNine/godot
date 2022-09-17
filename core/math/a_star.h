@@ -181,12 +181,13 @@ class AStar : public Reference {
 	Set<Segment> segments;
 	Set<Segment> oct_segments;
 
-	
-	
+	StringName straight_line_function;
+	ObjectID function_source_id = 0;
 
 	bool _solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants);
 	bool _octants_solve(Point* begin_point, Point* end_point, int relevant_layers);
 	int _can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id);
+	
 
 protected:
 	static void _bind_methods();
@@ -227,6 +228,9 @@ public:
 	void set_point_layer(int p_id, int layer_index, bool l_enabled = true);
 	bool get_point_layer(int p_id,int layer_index) const;
 	int get_point_layers_value(int p_id) const;
+
+	bool set_straight_line_function(Object* p_obj,const StringName &draw_straight_line_f_name);
+	PoolIntArray _get_straight_line(int from_point, int to_point);
 
 	void connect_octants(int o_id, int o_with_id, bool bidirectional = true);
 	void connect_points(int p_id, int p_with_id, bool bidirectional = true);
