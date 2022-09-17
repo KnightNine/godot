@@ -893,8 +893,8 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 			}
 		}
 		else {
-			//close begin_octant
-			o->closed_pass = oct_pass
+			//Mark the begin_octant as closed
+			o->closed_pass = oct_pass;
 		}
 
 		//this means the end point was reached as well,  
