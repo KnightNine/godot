@@ -836,6 +836,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 	begin_octant->g_score = 0;
 	begin_octant->f_score = _estimate_octant_cost(begin_octant->id, end_octant->id);
 	begin_octant->prev_octant = nullptr;
+	begin_octant->prev_octants.resize(0);
 
 	oct_open_list.push_back(begin_octant);
 
@@ -852,36 +853,57 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 		
 		
-
-
 		
 
 		
-		if (o->prev_octant != nullptr) {
-			//try pathing to this octant (after sorting the neighbors, in order to minimize the number of _can_path() checks needed)
-			int connection;
+		int size = o->prev_octants.size();
+		
+		if (size > 0) {
+			//try pathing from the previous octant to this octant (after sorting the neighbors, in order to minimize the number of _can_path() checks needed)
+			int connection = -1;
+			
 
-			int ppo_id = -1;
-			if (o->prev_octant->prev_octant != nullptr) {
-				ppo_id = o->prev_octant->prev_octant->id;
-			}
+			//try each previous octant for a valid connection:
+			PoolVector<Octant*>::Read r = o->prev_octants.read();
+
+			int i = 0;
+			while (connection == -1 && i < size) {
+
+				Octant* prev_octant = r[i];
+				WARN_PRINT(vformat("%d _can_path octant %d", o->id, prev_octant->id));
+				//id of the previous octant before the previous octant
+				int ppo_id = -1;
+				if (prev_octant->prev_octant != nullptr) {
+					ppo_id = prev_octant->prev_octant->id;
+				}
+
+
+				if (o == end_octant) {
+					//if this is the end_octant, reaching the end_point from the last octant is required in order for the octant connection to be valid
+					connection = _can_path(prev_octant->search_point, end_point, relevant_layers, prev_octant, o, true, ppo_id);
+				}
+				else {
+					connection = _can_path(prev_octant->search_point, o->origin, relevant_layers, prev_octant, o, false, ppo_id);
+				}
 				
+				i++;
+			}
+			Octant* valid_prev_octant = r[i - 1];
 
-			if (o == end_octant) {
-				//if this is the end_octant, reaching the end_point from the last octant is required in order for the octant connection to be valid
-				connection = _can_path(o->prev_octant->search_point, end_point, relevant_layers, o->prev_octant, o, true, ppo_id);
-			}
-			else {
-				connection = _can_path(o->prev_octant->search_point, o->origin, relevant_layers, o->prev_octant, o, false, ppo_id);
-			}
-			//ERR_PRINT(vformat("	octant connection is %s", connection ? "T" : "F"));
+			//clear previous octants
+			o->prev_octants.resize(0);
+
+			
 			//if no connection can be made to this octant, skip to the next most viable octant
 			if (connection == -1) {
-				//WARN_PRINT(vformat("un-passing octant %d", o->id));
+				WARN_PRINT(vformat("un-passing octant %d", o->id));
 				o->open_pass -= 1; // mark the octant as no longer in the open list (won't this cause an infinite loop?)
 				continue;
 			}
 			else {
+				//set to valid prev octant
+				o->prev_octant = valid_prev_octant;
+				
 				//set search point that will be used as the entrance to this octant
 				Point* search_point;
 				points.lookup(connection, search_point);
@@ -889,8 +911,10 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 				//once it has been pathed to sucessfully:
 				o->closed_pass = oct_pass; // Mark the octant as closed
-				
+
 			}
+
+			
 		}
 		else {
 			//Mark the begin_octant as closed
@@ -906,7 +930,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 		}
 
 
-
+		WARN_PRINT(vformat("testing neighbors of octant %d", o->id));
 
 
 		for (OAHashMap<int, Octant*>::Iterator it = o->neighbours.iter(); it.valid; it = o->neighbours.next_iter(it)) {
@@ -940,23 +964,28 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 				oe->open_pass = oct_pass;
 				oct_open_list.push_back(oe);
 				new_octant = true;
+				//clear prev_octants from previous pathing calls
+				oe->prev_octants.resize(0);
+				WARN_PRINT(vformat("===new oct neighbor %d", oe->id));
 			}
 			else if (tentative_g_score >= oe->g_score) { // The new path is worse than the previous.
 				continue;
 			}
 
-			oe->prev_octant = o;
+			//multiple octants can fit into the prev_octants because not all are valid connections
+			//insert less viable octants (in comparison to this octant) to be path tested first
+			oe->prev_octants.insert(0,o);
 
 			
 
 			oe->g_score = tentative_g_score;
 			oe->f_score = oe->g_score + _estimate_octant_cost(oe->id, end_octant->id);
 
-			/*
-			if (o->neighbours.has(end_octant->id)) {
-				WARN_PRINT(vformat("testing neighbor %d, g_score is %d, f_score is %d", oe->id, tentative_g_score, oe->f_score));
-			}
-			*/
+			
+			//if (o->neighbours.has(end_octant->id)) {
+			WARN_PRINT(vformat("~~~testing neighbor %d, g_score is %d, f_score is %d", oe->id, tentative_g_score, oe->f_score));
+			//}
+			
 			if (new_octant) { // The position of the new points is already known.
 				oct_sorter.push_heap(0, oct_open_list.size() - 1, 0, oe, oct_open_list.ptrw());
 			}
@@ -965,6 +994,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 			}
 		}
 	}
+	
 
 	WARN_PRINT(vformat("found_route %s", found_route ? "T" : "F"));
 
@@ -1423,9 +1453,9 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 				bool pp_exists = p->octant_source_prev_point.lookup(po_id, pp);
 				p->octant_source_prev_point.clear();
 				ERR_PRINT(vformat("in p %d pp_exists %s, p->octant = %d, o_id = %d, po_id = %d", p->id, pp_exists?"T":"F", p->octant->id, o->id, po_id));
-				if (!pp_exists) {
-
-				}
+				
+				CRASH_COND_MSG(!pp_exists, "path failed");
+				
 				p->prev_point = pp;
 				p = pp;
 			}

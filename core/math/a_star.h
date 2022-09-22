@@ -103,6 +103,7 @@ class AStar : public Reference {
 
 
 		// Used for pathfinding.
+		PoolVector<Octant*> prev_octants;
 		Octant* prev_octant;
 		real_t g_score;
 		real_t f_score;
