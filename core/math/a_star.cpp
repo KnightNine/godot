@@ -1247,11 +1247,8 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 
 
 bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants) {
-
-	Octant* begin_octant = begin_point->octant;
-	Octant* end_octant = end_point->octant;
-	//can't use _octants_solve if points are within the same octant
-	if (use_octants && begin_octant != end_octant) {
+	
+	if (use_octants) {
 		return _octants_solve(begin_point, end_point, relevant_layers);
 	}
 
@@ -1426,6 +1423,14 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 	Point *begin_point = a;
 	Point *end_point = b;
 
+	Octant* begin_octant = begin_point->octant;
+	Octant* end_octant = end_point->octant;
+
+	//can't use _octants_solve if points are within the same octant
+	if (begin_octant == end_octant) {
+		use_octants = false;
+	}
+
 	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31) - 1), PoolVector<Vector3>());
 
 	bool found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
@@ -1535,6 +1540,14 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 
 	Point *begin_point = a;
 	Point *end_point = b;
+
+	Octant* begin_octant = begin_point->octant;
+	Octant* end_octant = end_point->octant;
+
+	//can't use _octants_solve if points are within the same octant
+	if (begin_octant == end_octant) {
+		use_octants = false;
+	}
 
 	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31)-1), PoolVector<int>());
 
