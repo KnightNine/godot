@@ -831,6 +831,10 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 	begin_octant->search_point = begin_point;
 
 	Octant* end_octant = end_point->octant;
+
+
+	
+
 	ERR_PRINT(vformat("	pathing from: %d to: %d", begin_octant->id, end_octant->id));
 
 	begin_octant->g_score = 0;
@@ -1243,7 +1247,11 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 
 
 bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants) {
-	if (use_octants) {
+
+	Octant* begin_octant = begin_point->octant;
+	Octant* end_octant = end_point->octant;
+	//can't use _octants_solve if points are within the same octant
+	if (use_octants && begin_octant != end_octant) {
 		return _octants_solve(begin_point, end_point, relevant_layers);
 	}
 
