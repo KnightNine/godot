@@ -52,7 +52,8 @@ void Array::_ref(const Array &p_from) const {
 
 	bool success = _fp->refcount.ref();
 
-	ERR_FAIL_COND(!success); // should really not happen either
+	//ERR_FAIL_COND(!success); // should really not happen either
+	CRASH_COND(!success);
 
 	_unref();
 

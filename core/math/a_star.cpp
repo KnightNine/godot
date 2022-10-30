@@ -513,7 +513,10 @@ void AStar::set_point_weight_scale(int p_id, real_t p_weight_scale) {
 		}
 		else {
 			int i = o->weighted_points.find(p_id);
-			o->weighted_points.remove(i);
+			if (i != -1) {
+				o->weighted_points.remove(i);
+			}
+			
 
 		}
 		
@@ -832,15 +835,19 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 	Octant* end_octant = end_point->octant;
 
-
 	
-
-	ERR_PRINT(vformat("	pathing from: %d to: %d", begin_octant->id, end_octant->id));
+	
+	
+	print_line(vformat("	pathing from: %d to: %d", begin_octant->id, end_octant->id));
 
 	begin_octant->g_score = 0;
 	begin_octant->f_score = _estimate_octant_cost(begin_octant->id, end_octant->id);
 	begin_octant->prev_octant = nullptr;
+
+	//check if empty before resizing in order to not throw an error
 	begin_octant->prev_octants.resize(0);
+	
+	
 
 	oct_open_list.push_back(begin_octant);
 
@@ -849,7 +856,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 	while (!oct_open_list.empty()) {
 		Octant* o = oct_open_list[0]; // The currently processed octant
 		
-		//ERR_PRINT(vformat("running through octant of index %d.", o->id));
+		//print_line(vformat("running through octant of index %d.", o->id));
 		
 		oct_sorter.pop_heap(0, oct_open_list.size(), oct_open_list.ptrw()); // Remove the current octant from the open list
 		oct_open_list.remove(oct_open_list.size() - 1);
@@ -874,7 +881,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 			while (connection == -1 && i < size) {
 
 				Octant* prev_octant = r[i];
-				WARN_PRINT(vformat("%d _can_path octant %d", o->id, prev_octant->id));
+				print_line(vformat("%d _can_path octant %d", o->id, prev_octant->id));
 				//id of the previous octant before the previous octant
 				int ppo_id = -1;
 				if (prev_octant->prev_octant != nullptr) {
@@ -894,13 +901,15 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 			}
 			Octant* valid_prev_octant = r[i - 1];
 
+			r.release();
+
 			//clear previous octants
 			o->prev_octants.resize(0);
-
+			
 			
 			//if no connection can be made to this octant, skip to the next most viable octant
 			if (connection == -1) {
-				WARN_PRINT(vformat("un-passing octant %d", o->id));
+				print_line(vformat("un-passing octant %d", o->id));
 				o->open_pass -= 1; // mark the octant as no longer in the open list (won't this cause an infinite loop?)
 				continue;
 			}
@@ -934,7 +943,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 		}
 
 
-		WARN_PRINT(vformat("testing neighbors of octant %d", o->id));
+		print_line(vformat("testing neighbors of octant %d", o->id));
 
 
 		for (OAHashMap<int, Octant*>::Iterator it = o->neighbours.iter(); it.valid; it = o->neighbours.next_iter(it)) {
@@ -949,7 +958,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 			
 
 			
-			//ERR_PRINT(vformat("		testing neighbor %d: supported is %s, closed is %s",oe->id,  supported?"T":"F",(oe->closed_pass == oct_pass) ? "T" : "F"));
+			//print_line(vformat("		testing neighbor %d: supported is %s, closed is %s",oe->id,  supported?"T":"F",(oe->closed_pass == oct_pass) ? "T" : "F"));
 
 			if (oe->closed_pass == oct_pass || !supported) {
 				continue;
@@ -970,7 +979,8 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 				new_octant = true;
 				//clear prev_octants from previous pathing calls
 				oe->prev_octants.resize(0);
-				WARN_PRINT(vformat("===new oct neighbor %d", oe->id));
+				
+				print_line(vformat("===new oct neighbor %d", oe->id));
 			}
 			else if (tentative_g_score >= oe->g_score) { // The new path is worse than the previous.
 				continue;
@@ -987,7 +997,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 			
 			//if (o->neighbours.has(end_octant->id)) {
-			WARN_PRINT(vformat("~~~testing neighbor %d, g_score is %d, f_score is %d", oe->id, tentative_g_score, oe->f_score));
+			print_line(vformat("~~~testing neighbor %d, g_score is %d, f_score is %d", oe->id, tentative_g_score, oe->f_score));
 			//}
 			
 			if (new_octant) { // The position of the new points is already known.
@@ -1000,7 +1010,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 	}
 	
 
-	WARN_PRINT(vformat("found_route %s", found_route ? "T" : "F"));
+	print_line(vformat("found_route %s", found_route ? "T" : "F"));
 
 	return found_route;
 }
@@ -1096,7 +1106,7 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 			}
 			else {
 				
-				WARN_PRINT(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, prev_p->id));
+				print_line(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, prev_p->id));
 				
 
 
@@ -1115,7 +1125,7 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 
 	}
 	else {
-		WARN_PRINT("Not using straight paths");
+		print_line("Not using straight paths");
 	}
 	
 
@@ -1145,7 +1155,7 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 			Point* p = open_list[0]; // The currently processed point
 			
 			if (p != begin_point) {
-				WARN_PRINT(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, p->prev_point->id));
+				print_line(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, p->prev_point->id));
 			}
 			
 
@@ -1234,14 +1244,14 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 			}
 		}
 		if (found_point != -1) {
-			WARN_PRINT(vformat("++found_point %d, of end octant %d, from begin octant %d and point %d.", found_point, end_octant->id, begin_octant->id, begin_point->id));
+			print_line(vformat("++found_point %d, of end octant %d, from begin octant %d and point %d.", found_point, end_octant->id, begin_octant->id, begin_point->id));
 		}
 		else {
-			WARN_PRINT(vformat("--did not find point to end octant %d, from begin octant %d and point %d.", end_octant->id, begin_octant->id,begin_point->id));
+			print_line(vformat("--did not find point to end octant %d, from begin octant %d and point %d.", end_octant->id, begin_octant->id,begin_point->id));
 		}
 	}
 	
-	WARN_PRINT("broke");
+	print_line("broke");
 	return found_point;
 }
 
@@ -1465,7 +1475,7 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 				Point* pp;
 				bool pp_exists = p->octant_source_prev_point.lookup(po_id, pp);
 				p->octant_source_prev_point.clear();
-				ERR_PRINT(vformat("in p %d pp_exists %s, p->octant = %d, o_id = %d, po_id = %d", p->id, pp_exists?"T":"F", p->octant->id, o->id, po_id));
+				print_line(vformat("in p %d pp_exists %s, p->octant = %d, o_id = %d, po_id = %d", p->id, pp_exists?"T":"F", p->octant->id, o->id, po_id));
 				
 				CRASH_COND_MSG(!pp_exists, "path failed");
 				
@@ -1501,15 +1511,59 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 
 		Point* p2 = end_point;
 		int idx = pc - 1;
+		int removed_p_idx = 0;
+
 		while (p2 != begin_point) {
 			w[idx--] = p2->pos;
 
-			p2 = p2->prev_point;
+			
+
+			if (use_octants) {
+				//remove unneccessary points in the path caused by using octants
+				if (p2 != begin_point && p2->prev_point != begin_point) {
+					Point* skip_point = p2->prev_point->prev_point;
+
+					//check if connected to p2
+					Segment s(skip_point->id, p2->id);
+					const Set<Segment>::Element* element = segments.find(s);
+					bool connected = element != nullptr && (element->get().direction & s.direction) == s.direction;
+
+					if (connected) {
+						p2 = skip_point;
+						removed_p_idx++;
+					}
+					else {
+						p2 = p2->prev_point;
+					}
+				}
+				else {
+					p2 = p2->prev_point;
+				}
+				
+			}
+			else {
+				p2 = p2->prev_point;
+			}
 
 		}
 
-		w[0] = p2->pos; // Assign first
+		
 
+		
+		w[idx] = p2->pos; // Assign first
+
+		print_line(vformat("removed_p_idx %d, pc %d", removed_p_idx, pc));
+		if (removed_p_idx > 0) {
+			for (int i = 0; i < pc - removed_p_idx; i++) {
+				w[i] = w[i + removed_p_idx];
+			};
+			w.release();
+		
+			path.resize(pc - removed_p_idx);
+		}
+		
+
+		
 
 	}
 	
@@ -1616,14 +1670,53 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 
 		p = end_point;
 		int idx = pc - 1;
+		int removed_p_idx = 0;
+
 		while (p != begin_point) {
 			w[idx--] = p->id;
 			
-			p = p->prev_point;
+			if (use_octants) {
+				//remove unneccessary points in the path caused by using octants
+				if (p != begin_point && p->prev_point != begin_point) {
+					Point* skip_point = p->prev_point->prev_point;
+
+					//check if connected to p
+					Segment s(skip_point->id, p->id);
+					const Set<Segment>::Element* element = segments.find(s);
+					bool connected = element != nullptr && (element->get().direction & s.direction) == s.direction;
+
+					if (connected) {
+						p = skip_point;
+						removed_p_idx++;
+					}
+					else {
+						p = p->prev_point;
+					}
+				}
+				else {
+					p = p->prev_point;
+				}
+
+			}
+			else {
+				p = p->prev_point;
+			}
 		}
 
-		w[0] = p->id; // Assign first
-		
+
+		w[idx] = p->id; // Assign first
+
+		w.release();
+
+		print_line(vformat("removed_p_idx %d, pc %d", removed_p_idx, pc));
+		if (removed_p_idx > 0) {
+			for (int i = 0; i < pc - removed_p_idx; i++) {
+				w[i] = w[i + removed_p_idx];
+			};
+			w.release();
+
+			path.resize(pc - removed_p_idx);
+		}
 	}
 
 	return path;
