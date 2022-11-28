@@ -734,7 +734,9 @@ void AStar::clear() {
 	}
 	segments.clear();
 	oct_segments.clear();
+	octants.clear();
 	points.clear();
+	
 }
 
 int AStar::get_point_count() const {
@@ -1638,8 +1640,10 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 				pc++;
 				//find the prev point that is in the direction of the previous octant
 				Point* pp;
-				p->octant_source_prev_point.lookup(po_id, pp);
+				bool pp_exists = p->octant_source_prev_point.lookup(po_id, pp);
 				p->octant_source_prev_point.clear();
+
+				CRASH_COND_MSG(!pp_exists, "path failed");
 
 				p->prev_point = pp;
 				p = pp;

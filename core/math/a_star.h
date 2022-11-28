@@ -50,7 +50,8 @@ class AStar : public Reference {
 	struct Point {
 		Point() :
 				neighbours(4u),
-				unlinked_neighbours(4u) {}
+				unlinked_neighbours(4u),
+				octant_source_prev_point(4u) {}
 
 		int id;
 		Vector3 pos;
@@ -67,7 +68,7 @@ class AStar : public Reference {
 
 		// Used for pathfinding.
 		Point *prev_point;
-		OAHashMap<int, Point*> octant_source_prev_point;
+		OAHashMap<int, Point *> octant_source_prev_point;
 		real_t g_score;
 		real_t f_score;
 		uint64_t open_pass;
@@ -80,7 +81,8 @@ class AStar : public Reference {
 
 		Octant() :
 			neighbours(4u),
-			unlinked_neighbours(4u) {}
+			unlinked_neighbours(4u),
+			points(4u) {}
 
 		int id;
 		Point* origin;
