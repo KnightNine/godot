@@ -256,6 +256,7 @@ void AStar::add_octant(int o_id, const PoolVector<int> &pool_points, const Vecto
 	}
 
 }
+
 //returns int array 
 PoolVector<int> AStar::debug_octant(int o_id) {
 	Octant* o;
@@ -893,10 +894,10 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 
 				if (o == end_octant) {
 					//if this is the end_octant, reaching the end_point from the last octant is required in order for the octant connection to be valid
-					connection = _can_path(prev_octant->search_point, end_point, relevant_layers, prev_octant, o, true, ppo_id);
+					connection = _can_path(prev_octant->search_point, end_point, relevant_layers, prev_octant, o, true, ppo_id, begin_point, end_point);
 				}
 				else {
-					connection = _can_path(prev_octant->search_point, o->origin, relevant_layers, prev_octant, o, false, ppo_id);
+					connection = _can_path(prev_octant->search_point, o->origin, relevant_layers, prev_octant, o, false, ppo_id,begin_point,end_point);
 				}
 				
 				i++;
@@ -912,7 +913,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 			//if no connection can be made to this octant, skip to the next most viable octant
 			if (connection == -1) {
 				print_line(vformat("un-passing octant %d", o->id));
-				o->open_pass -= 1; // mark the octant as no longer in the open list (won't this cause an infinite loop?)
+				o->open_pass -= 1; // mark the octant as no longer in the open list so that another path to it may be made to it from a different neighbouring octant (won't this cause an infinite loop?, (probably not since once all neighbouring octants have tried to path to this octant, it will no longer show up within the open_list ))
 				continue;
 			}
 			else {
@@ -1018,7 +1019,7 @@ bool AStar::_octants_solve(Point* begin_point, Point* end_point, int relevant_la
 }
 
 
-int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id) {
+int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id, Point* absolute_begin_point, Point* absolute_end_point) {
 	//prev_octant_id is the id of the octant before the begin octant
 	int found_point = -1;
 
@@ -1033,6 +1034,13 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 				return -1;
 			}
 		}
+	}
+
+
+	//set absolute scores if this is the very first point
+	if (begin_point == absolute_begin_point) {
+		begin_point->abs_g_score = 0;
+		begin_point->abs_f_score = _estimate_cost(begin_point->id, absolute_end_point->id);
 	}
 
 	// first try pathing with a straight line to the end point:
@@ -1080,7 +1088,14 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 			}
 
 			
+			//the true scores relative to the begin and end points initially defined within _solve()
+			p->abs_g_score = prev_p->abs_g_score + _compute_cost(p->id, prev_p->id) * p->weight_scale;
+			p->abs_f_score = _estimate_cost(p->id, absolute_end_point->id);
 
+			//closer to end_point, or same distance to end_point but closer to begin_point
+			if (closest_point_of_last_pathing_call == nullptr || closest_point_of_last_pathing_call->abs_f_score > p->abs_f_score || (closest_point_of_last_pathing_call->abs_f_score >= p->abs_f_score && closest_point_of_last_pathing_call->abs_g_score > p->abs_g_score)) {
+				closest_point_of_last_pathing_call = p;
+			}
 
 			
 
@@ -1091,15 +1106,17 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 				
 
 				if (p->octant == end_octant) {
-					//try to reach the end point if true 
+					//try to continue the loop in order to reach the end point if true 
 					if (reach_end_point) {
 						if (p == end_point) {
 							found_point = p->id;
+
 							break;
 						}
 					}
 					else {
 						found_point = p->id;
+
 						break;
 					}
 				}
@@ -1149,13 +1166,25 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 
 		begin_point->g_score = 0;
 		begin_point->f_score = _estimate_cost(begin_point->id, end_point->id);
+
+		
+
+
 		open_list.push_back(begin_point);
 
 		
 
 		while (!open_list.empty()) {
 			Point* p = open_list[0]; // The currently processed point
+
 			
+			//closer to end_point, or same distance to end_point but closer to begin_point
+			if (closest_point_of_last_pathing_call == nullptr || closest_point_of_last_pathing_call->abs_f_score > p->abs_f_score || (closest_point_of_last_pathing_call->abs_f_score >= p->abs_f_score && closest_point_of_last_pathing_call->abs_g_score > p->abs_g_score)) {
+				closest_point_of_last_pathing_call = p;
+			}
+			
+
+
 			if (p != begin_point) {
 				print_line(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, p->prev_point->id));
 			}
@@ -1235,6 +1264,13 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 				e->g_score = tentative_g_score;
 				e->f_score = e->g_score + _estimate_cost(e->id, end_point->id);
 
+
+				//the true scores relative to the begin and end points initially defined within _solve()
+				e->abs_g_score = p->abs_g_score + _compute_cost(p->id, e->id) * e->weight_scale;
+				e->abs_f_score =_estimate_cost(p->id, absolute_end_point->id);
+
+				
+
 				
 
 				if (new_point) { // The position of the new points is already known.
@@ -1259,7 +1295,13 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 
 
 bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants) {
+
 	
+	id_path_of_last_pathing_call.resize(0);
+	point_path_of_last_pathing_call.resize(0);
+	closest_point_of_last_pathing_call = nullptr;
+
+
 	if (use_octants) {
 		return _octants_solve(begin_point, end_point, relevant_layers);
 	}
@@ -1282,10 +1324,20 @@ bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers, bo
 
 	begin_point->g_score = 0;
 	begin_point->f_score = _estimate_cost(begin_point->id, end_point->id);
+
+	begin_point->abs_g_score = 0;
+	begin_point->abs_f_score = _estimate_cost(begin_point->id, end_point->id);
+
 	open_list.push_back(begin_point);
 
 	while (!open_list.empty()) {
 		Point *p = open_list[0]; // The currently processed point
+
+		//closer to end_point, or same distance to end_point but closer to begin_point
+		if (closest_point_of_last_pathing_call == nullptr || closest_point_of_last_pathing_call->abs_f_score > p->abs_f_score || (closest_point_of_last_pathing_call->abs_f_score >= p->abs_f_score && closest_point_of_last_pathing_call->abs_g_score > p->abs_g_score)) {
+			closest_point_of_last_pathing_call = p;
+		}
+
 
 		if (p == end_point) {
 			found_route = true;
@@ -1334,6 +1386,11 @@ bool AStar::_solve(Point *begin_point, Point *end_point, int relevant_layers, bo
 
 			e->g_score = tentative_g_score;
 			e->f_score = e->g_score + _estimate_cost(e->id, end_point->id);
+
+
+			e->abs_g_score = tentative_g_score;
+			e->abs_f_score = e->f_score - e->g_score;
+			
 
 			if (new_point) { // The position of the new points is already known.
 				sorter.push_heap(0, open_list.size() - 1, 0, e, open_list.ptrw());
@@ -1446,8 +1503,18 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31) - 1), PoolVector<Vector3>());
 
 	bool found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
+
 	if (!found_route) {
-		return PoolVector<Vector3>();
+
+		if (closest_point_of_last_pathing_call == nullptr) {
+			return PoolVector<Vector3>();
+		}
+
+
+		//use closest point instead
+		end_point = closest_point_of_last_pathing_call;
+
+		WARN_PRINT(vformat("closest_point_of_last_pathing_call: %d,%d,%d .", closest_point_of_last_pathing_call->pos.x, closest_point_of_last_pathing_call->pos.y, closest_point_of_last_pathing_call->pos.z));
 	}
 	
 	
@@ -1560,13 +1627,21 @@ PoolVector<Vector3> AStar::get_point_path(int p_from_id, int p_to_id, int releva
 				w[i] = w[i + removed_p_idx];
 			};
 			w.release();
-		
+
 			path.resize(pc - removed_p_idx);
 		}
 		
-
+		
+		
+		
 		
 
+	}
+
+	if (!found_route) {
+
+		point_path_of_last_pathing_call = path;
+		return PoolVector<Vector3>();
 	}
 	
 
@@ -1609,7 +1684,15 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 
 	bool found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
 	if (!found_route) {
-		return PoolVector<int>();
+
+
+		if (closest_point_of_last_pathing_call == nullptr) {
+			return PoolVector<int>();
+		}
+
+		//use closest point instead
+		end_point = closest_point_of_last_pathing_call;
+		WARN_PRINT(vformat("closest_point_of_last_pathing_call: %d,%d,%d .", closest_point_of_last_pathing_call->pos.x, closest_point_of_last_pathing_call->pos.y, closest_point_of_last_pathing_call->pos.z));
 	}
 
 
@@ -1721,10 +1804,30 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 
 			path.resize(pc - removed_p_idx);
 		}
+
+		
+
+	}
+
+	if (!found_route) {
+		id_path_of_last_pathing_call = path;
+
+		return PoolVector<int>();
+
 	}
 
 	return path;
 }
+
+//get path of last call to get_id_path if the path_fails
+PoolVector<int> AStar::get_proximity_id_path_of_last_pathing_call() {
+	return id_path_of_last_pathing_call;
+}
+//get path of last call to get_point_path if the path_fails
+PoolVector<Vector3> AStar::get_proximity_point_path_of_last_pathing_call() {
+	return point_path_of_last_pathing_call;
+}
+
 
 
 
@@ -1860,6 +1963,8 @@ PoolIntArray AStar::_get_straight_line(int from_point, int to_point) {
 
 
 
+
+
 void AStar::_bind_methods() {
 
 	
@@ -1912,6 +2017,9 @@ void AStar::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_point_path", "from_id", "to_id", "relevant_layers","use_octants"), &AStar::get_point_path, DEFVAL(0),DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("get_id_path", "from_id", "to_id", "relevant_layers", "use_octants"), &AStar::get_id_path, DEFVAL(0), DEFVAL(false));
+
+	ClassDB::bind_method(D_METHOD("get_proximity_id_path_of_last_pathing_call"), &AStar::get_proximity_id_path_of_last_pathing_call);
+	ClassDB::bind_method(D_METHOD("get_proximity_point_path_of_last_pathing_call"), &AStar::get_proximity_point_path_of_last_pathing_call);
 	
 	
 	ClassDB::bind_method(D_METHOD("_get_straight_line", "from_id", "to_id"), &AStar::_get_straight_line);
@@ -2250,6 +2358,9 @@ void AStar2D::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_point_path", "from_id", "to_id"), &AStar2D::get_point_path);
 	ClassDB::bind_method(D_METHOD("get_id_path", "from_id", "to_id"), &AStar2D::get_id_path);
+
+	
+	
 
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_estimate_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));
 	BIND_VMETHOD(MethodInfo(Variant::REAL, "_compute_cost", PropertyInfo(Variant::INT, "from_id"), PropertyInfo(Variant::INT, "to_id")));

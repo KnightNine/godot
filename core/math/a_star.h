@@ -73,6 +73,9 @@ class AStar : public Reference {
 		real_t f_score;
 		uint64_t open_pass;
 		uint64_t closed_pass;
+		//used for getting closest_point_of_last_pathing_call
+		real_t abs_g_score;
+		real_t abs_f_score;
 
 		
 	};
@@ -112,6 +115,7 @@ class AStar : public Reference {
 		uint64_t open_pass;
 		uint64_t closed_pass;
 		Point* search_point;
+		
 		
 	};
 
@@ -184,12 +188,16 @@ class AStar : public Reference {
 	Set<Segment> segments;
 	Set<Segment> oct_segments;
 
+	PoolVector<int> id_path_of_last_pathing_call;
+	PoolVector<Vector3> point_path_of_last_pathing_call;
+	Point * closest_point_of_last_pathing_call;
+
 	StringName straight_line_function;
 	ObjectID function_source_id = 0;
 
 	bool _solve(Point *begin_point, Point *end_point, int relevant_layers, bool use_octants);
 	bool _octants_solve(Point* begin_point, Point* end_point, int relevant_layers);
-	int _can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id);
+	int _can_path(Point* begin_point, Point* end_point, int relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int prev_octant_id,Point* absolute_begin_point, Point* absolute_end_point);
 	
 
 protected:
@@ -249,10 +257,16 @@ public:
 	int get_closest_point(const Vector3 &p_point, bool p_include_disabled = false, int relevant_layers = 0) const;
 	Vector3 get_closest_position_in_segment(const Vector3 &p_point) const;
 
+
+	PoolVector<int> get_proximity_id_path_of_last_pathing_call();
+	PoolVector<Vector3> get_proximity_point_path_of_last_pathing_call();
+
 	PoolVector<Vector3> get_point_path(int p_from_id, int p_to_id, int relevant_layers = 0, bool use_octants = false);
 	PoolVector<int> get_id_path(int p_from_id, int p_to_id, int relevant_layers = 0, bool use_octants = false);
 
-	PoolVector<uint8_t> get_skipped_connections_of_last_path_array();
+	
+
+	//PoolVector<uint8_t> get_skipped_connections_of_last_path_array();
 
 	AStar();
 	~AStar();
