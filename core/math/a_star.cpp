@@ -498,25 +498,33 @@ void AStar::set_point_weight_scale(int p_id, real_t p_weight_scale) {
 	p->weight_scale = p_weight_scale;
 
 	// if point is part of an octant, adjust the octant's weight scale 
-	 
-			
-	
-
-			
-			
 	if (p->octant != nullptr) {
 		Octant* o = p->octant;
-		o->weight_scale -= original_ws - 1;
+
+		//weight scale of octant is the average of the weight scales of all points it contains.
+		int octant_points_size = o->points.get_num_elements();
+
+		//remove point old weight scale from octant
+		o->weight_scale -= (original_ws - 1) / octant_points_size;
 
 		if (p->weight_scale != real_t(1)) {
 			o->weighted_points.append(p_id);
-			o->weight_scale += (p_weight_scale - 1) / o->points.get_num_elements();
+			//add point new weight scale to octant
+			o->weight_scale += (p_weight_scale - 1) / octant_points_size;
 		}
 		else {
+			//point is no longer weighted
 			int i = o->weighted_points.find(p_id);
 			if (i != -1) {
 				o->weighted_points.remove(i);
 			}
+
+
+			//reset octant weight scale if all weighted points removed, this is to negate any floating point inaccuracies which may accumulate
+			if (o->weighted_points.size() == 0) {
+				o->weight_scale = 1;
+			}
+
 			
 
 		}
