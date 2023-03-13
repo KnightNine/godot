@@ -184,6 +184,7 @@ void AStar::add_octant(int o_id, const PoolVector<int> &pool_points, const Vecto
 		}
 
 		found_oc->points.clear();
+		found_oc->weighted_points.resize(0);
 		found_oc->weight_scale = 1;
 		
 		int size = pool_points.size();
@@ -493,7 +494,7 @@ void AStar::set_point_weight_scale(int p_id, real_t p_weight_scale) {
 	ERR_FAIL_COND_MSG(!p_exists, vformat("Can't set point's weight scale. Point with id: %d doesn't exist.", p_id));
 	ERR_FAIL_COND_MSG(p_weight_scale < 0, vformat("Can't set point's weight scale less than 0.0: %f.", p_weight_scale));
 
-	int original_ws = p->weight_scale;
+	real_t original_ws = p->weight_scale;
 
 	p->weight_scale = p_weight_scale;
 
@@ -506,6 +507,11 @@ void AStar::set_point_weight_scale(int p_id, real_t p_weight_scale) {
 
 		//remove point old weight scale from octant
 		o->weight_scale -= (original_ws - 1) / octant_points_size;
+		//remove from weighted points
+		int i = o->weighted_points.find(p_id);
+		if (i != -1) {
+			o->weighted_points.remove(i);
+		}
 
 		if (p->weight_scale != real_t(1)) {
 			o->weighted_points.append(p_id);
@@ -514,10 +520,6 @@ void AStar::set_point_weight_scale(int p_id, real_t p_weight_scale) {
 		}
 		else {
 			//point is no longer weighted
-			int i = o->weighted_points.find(p_id);
-			if (i != -1) {
-				o->weighted_points.remove(i);
-			}
 
 
 			//reset octant weight scale if all weighted points removed, this is to negate any floating point inaccuracies which may accumulate
@@ -1091,7 +1093,7 @@ int AStar::_can_path(Point* begin_point, Point* end_point, int relevant_layers, 
 			bool supported = relevant_layers == 0 || (relevant_layers & p->parallel_support_layers) > 0;
 
 			//not disabled, and not of a modified weight scale
-			if (!p->enabled || !supported || p->weight_scale != 1) {
+			if (!p->enabled || !supported || p->weight_scale != real_t(1)) {
 				break;
 			}
 
@@ -1428,7 +1430,7 @@ real_t AStar::_estimate_cost(int p_from_id, int p_to_id) {
 }
 
 real_t AStar::_estimate_octant_cost(int o_from_id, int o_to_id) {
-	if (get_script_instance() && get_script_instance()->has_method(SceneStringNames::get_singleton()->_estimate_cost)) {
+	if (get_script_instance() && get_script_instance()->has_method(SceneStringNames::get_singleton()->_estimate_octant_cost)) {
 		return get_script_instance()->call(SceneStringNames::get_singleton()->_estimate_octant_cost, o_from_id, o_to_id);
 	}
 
@@ -1801,7 +1803,7 @@ PoolVector<int> AStar::get_id_path(int p_from_id, int p_to_id, int relevant_laye
 
 		w[idx] = p->id; // Assign first
 
-		w.release();
+		
 
 		print_line(vformat("removed_p_idx %d, pc %d", removed_p_idx, pc));
 		if (removed_p_idx > 0) {
