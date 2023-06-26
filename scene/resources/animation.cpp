@@ -5781,6 +5781,71 @@ Variant Animation::blend_variant(const Variant &a, const Variant &b, float c) {
 			return (a.operator Transform3D()) * Transform3D().interpolate_with((b.operator Transform3D()), c);
 		}
 		default: {
+			if (a.is_array()) {
+				switch (a.get_type()) {
+				case Variant::ARRAY: {
+					Array arr_a = a;
+					Array arr_b = b;
+					int size = arr_a.size();
+					if (size == 0 || arr_b.size() != size) {
+						return a;
+					}
+
+					Array result;
+
+					if (arr_a.is_typed() && arr_b.is_typed()) {
+						uint32_t type_a = arr_a.get_typed_builtin();
+						uint32_t type_b = arr_b.get_typed_builtin();
+
+						if (type_a != type_b) {
+							// Do not blend different typed Arrays, make an exception for numbers.
+							if ((type_a != Variant::FLOAT && type_b != Variant::INT) &&
+								type_a != Variant::INT && type_b != Variant::FLOAT) {
+								return a;
+							}
+						}
+
+						result.set_typed(type_a, StringName(), Variant());
+					}
+
+					result.resize(size);
+					for (int i = 0; i < size; i++) {
+						result[i] = blend_variant(arr_a[i], arr_b[i], c);
+					}
+					return result;
+				} break;
+				case Variant::PACKED_BYTE_ARRAY: {
+					return blend_packed_array(PackedByteArray(a), PackedByteArray(b), c);
+				}
+				case Variant::PACKED_INT32_ARRAY: {
+					return blend_packed_array(PackedInt32Array(a), PackedInt32Array(b), c);
+				}
+				case Variant::PACKED_INT64_ARRAY: {
+					return blend_packed_array(PackedInt64Array(a), PackedInt64Array(b), c);
+				}
+				case Variant::PACKED_FLOAT32_ARRAY: {
+					return blend_packed_array(PackedFloat32Array(a), PackedFloat32Array(b), c);
+				}
+				case Variant::PACKED_FLOAT64_ARRAY: {
+					return blend_packed_array(PackedFloat64Array(a), PackedFloat64Array(b), c);
+				}
+				case Variant::PACKED_STRING_ARRAY: {
+					return blend_packed_array(PackedStringArray(a), PackedStringArray(b), c);
+				}
+				case Variant::PACKED_VECTOR2_ARRAY: {
+					return blend_packed_array(PackedVector2Array(a), PackedVector2Array(b), c);
+				}
+				case Variant::PACKED_VECTOR3_ARRAY: {
+					return blend_packed_array(PackedVector3Array(a), PackedVector3Array(b), c);
+				}
+				case Variant::PACKED_COLOR_ARRAY: {
+					return blend_packed_array(PackedColorArray(a), PackedColorArray(b), c);
+				}
+				default: {
+					return a;
+				}
+				}
+			}
 			return c < 0.5 ? a : b;
 		}
 	}
@@ -6019,6 +6084,27 @@ Vector<T> Animation::subtract_packed_array(Vector<T> a, Vector<T> b) {
 }
 
 template <class T>
+Vector<T> Animation::blend_packed_array(Vector<T> a, Vector<T> b, float c) {
+	int size = a.size();
+	if (size == 0 || b.size() != size) {
+		return a;
+	}
+	else {
+		Vector<T> result;
+		result.resize(size);
+
+		T* result_ptr = result.ptrw();
+		const T* a_ptr = a.ptr();
+		const T* b_ptr = b.ptr();
+
+		for (int i = 0; i < size; i++) {
+			result_ptr[i] = blend_variant(a_ptr[i], b_ptr[i], c);
+		}
+		return result;
+	}
+}
+
+template <class T>
 Vector<T> Animation::interpolate_packed_array(Vector<T> a, Vector<T> b, float c) {
 	int size = a.size();
 	if (size == 0 || b.size() != size) {
@@ -6038,6 +6124,7 @@ Vector<T> Animation::interpolate_packed_array(Vector<T> a, Vector<T> b, float c)
 		return result;
 	}
 }
+
 
 Animation::Animation() {
 }
