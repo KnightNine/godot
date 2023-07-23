@@ -164,37 +164,64 @@ void ShaderCreateDialog::_create_new() {
 			code += vformat("shader_type %s;\n", mode_menu->get_text().to_snake_case());
 
 			if (current_template == 0) { // Default template.
-				code += "\n";
 				switch (current_mode) {
 					case Shader::MODE_SPATIAL:
-						code += "void fragment() {\n";
-						code += "\t// Place fragment code here.\n";
-						code += "}\n";
+						code += R"(
+void vertex() {
+	// Called for every vertex the material is visible on.
+}
+
+void fragment() {
+	// Called for every pixel the material is visible on.
+}
+
+void light() {
+	// Called for every pixel for every light affecting the material.
+}
+)";
 						break;
 					case Shader::MODE_CANVAS_ITEM:
-						code += "void fragment() {\n";
-						code += "\t// Place fragment code here.\n";
-						code += "}\n";
+						code += R"(
+void vertex() {
+	// Called for every vertex the material is visible on.
+}
+
+void fragment() {
+	// Called for every pixel the material is visible on.
+}
+
+void light() {
+	// Called for every pixel for every light affecting the CanvasItem.
+}
+)";
 						break;
 					case Shader::MODE_PARTICLES:
-						code += "void start() {\n";
-						code += "\t// Place start code here.\n";
-						code += "}\n";
-						code += "\n";
-						code += "void process() {\n";
-						code += "\t// Place process code here.\n";
-						code += "}\n";
+						code += R"(
+void start() {
+	// Called when a particle is spawned.
+}
+
+void process() {
+	// Called every frame on existing particles (according to the Fixed FPS property).
+}
+)";
 						break;
 					case Shader::MODE_SKY:
-						code += "void sky() {\n";
-						code += "\t// Place sky code here.\n";
-						code += "}\n";
+						code += R"(
+void sky() {
+	// Called for every visible pixel in the sky background, as well as all pixels
+	// in the radiance cubemap.
+}
+)";
 						break;
 					case Shader::MODE_FOG:
-						code += "void fog() {\n";
-						code += "\t// Place fog code here.\n";
-						code += "}\n";
-						break;
+						code += R"(
+void fog() {
+	// Called once for every froxel that is touched by an axis-aligned bounding box
+	// of the associated FogVolume. This means that froxels that just barely touch
+	// a given FogVolume will still be used.
+}
+)";
 				}
 			}
 			text_shader->set_code(code.as_string());
@@ -464,7 +491,7 @@ String ShaderCreateDialog::_validate_path(const String &p_path) {
 }
 
 void ShaderCreateDialog::_msg_script_valid(bool valid, const String &p_msg) {
-	error_label->set_text("- " + p_msg);
+	error_label->set_text(String::utf8("•  ") + p_msg);
 	if (valid) {
 		error_label->add_theme_color_override("font_color", gc->get_theme_color(SNAME("success_color"), SNAME("Editor")));
 	} else {
@@ -473,7 +500,7 @@ void ShaderCreateDialog::_msg_script_valid(bool valid, const String &p_msg) {
 }
 
 void ShaderCreateDialog::_msg_path_valid(bool valid, const String &p_msg) {
-	path_error_label->set_text("- " + p_msg);
+	path_error_label->set_text(String::utf8("•  ") + p_msg);
 	if (valid) {
 		path_error_label->add_theme_color_override("font_color", gc->get_theme_color(SNAME("success_color"), SNAME("Editor")));
 	} else {

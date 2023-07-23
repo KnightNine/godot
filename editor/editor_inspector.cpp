@@ -45,6 +45,7 @@
 #include "scene/gui/texture_rect.h"
 #include "scene/property_utils.h"
 #include "scene/resources/packed_scene.h"
+#include "scene/resources/style_box_flat.h"
 
 bool EditorInspector::_property_path_matches(const String &p_property_path, const String &p_filter, EditorPropertyNameProcessor::Style p_style) {
 	if (p_property_path.findn(p_filter) != -1) {
@@ -3184,10 +3185,11 @@ void EditorInspector::update_tree() {
 										if (val.enumeration == enum_name && !val.name.ends_with("_MAX")) {
 											const String enum_value = EditorPropertyNameProcessor::get_singleton()->process_name(val.name, EditorPropertyNameProcessor::STYLE_CAPITALIZED);
 											// Prettify the enum value display, so that "<ENUM NAME>_<VALUE>" becomes "Value".
+											String desc = DTR(val.description).trim_prefix("\n");
 											doc_info.description += vformat(
 													"\n[b]%s:[/b] %s",
 													enum_value.trim_prefix(EditorPropertyNameProcessor::get_singleton()->process_name(enum_name, EditorPropertyNameProcessor::STYLE_CAPITALIZED) + " "),
-													DTR(val.description).trim_prefix("\n"));
+													desc.is_empty() ? ("[i]" + TTR("No description.") + "[/i]") : desc);
 										}
 									}
 								}
