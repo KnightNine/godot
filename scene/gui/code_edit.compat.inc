@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  android_mono_config.h                                                 */
+/*  code_edit.compat.inc                                                  */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,16 +28,14 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef ANDROID_MONO_CONFIG_H
-#define ANDROID_MONO_CONFIG_H
+#ifndef DISABLE_DEPRECATED
 
-#ifdef ANDROID_ENABLED
+String CodeEdit::_get_text_for_symbol_lookup_bind_compat_73196() {
+	return get_text_for_symbol_lookup();
+}
 
-#include "core/string/ustring.h"
+void CodeEdit::_bind_compatibility_methods() {
+	ClassDB::bind_compatibility_method(D_METHOD("get_text_for_symbol_lookup"), &CodeEdit::_get_text_for_symbol_lookup_bind_compat_73196);
+}
 
-// This function is defined in an auto-generated source file
-String get_godot_android_mono_config();
-
-#endif // ANDROID_ENABLED
-
-#endif // ANDROID_MONO_CONFIG_H
+#endif

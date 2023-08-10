@@ -146,29 +146,29 @@ const PackedStringArray ProjectSettings::_trim_to_supported_features(const Packe
 #endif // TOOLS_ENABLED
 
 String ProjectSettings::localize_path(const String &p_path) const {
-	if (resource_path.is_empty() || (p_path.is_absolute_path() && !p_path.begins_with(resource_path))) {
-		return p_path.simplify_path();
+	String path = p_path.simplify_path();
+
+	if (resource_path.is_empty() || (path.is_absolute_path() && !path.begins_with(resource_path))) {
+		return path;
 	}
 
 	// Check if we have a special path (like res://) or a protocol identifier.
-	int p = p_path.find("://");
+	int p = path.find("://");
 	bool found = false;
 	if (p > 0) {
 		found = true;
 		for (int i = 0; i < p; i++) {
-			if (!is_ascii_alphanumeric_char(p_path[i])) {
+			if (!is_ascii_alphanumeric_char(path[i])) {
 				found = false;
 				break;
 			}
 		}
 	}
 	if (found) {
-		return p_path.simplify_path();
+		return path;
 	}
 
 	Ref<DirAccess> dir = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
-
-	String path = p_path.replace("\\", "/").simplify_path();
 
 	if (dir->change_dir(path) == OK) {
 		String cwd = dir->get_current_dir();
@@ -187,7 +187,7 @@ String ProjectSettings::localize_path(const String &p_path) const {
 		cwd = cwd.path_join("");
 
 		if (!cwd.begins_with(res_path)) {
-			return p_path;
+			return path;
 		}
 
 		return cwd.replace_first(res_path, "res://");
@@ -1260,6 +1260,7 @@ ProjectSettings::ProjectSettings() {
 	GLOBAL_DEF_BASIC("application/config/name", "");
 	GLOBAL_DEF_BASIC(PropertyInfo(Variant::DICTIONARY, "application/config/name_localized", PROPERTY_HINT_LOCALIZABLE_STRING), Dictionary());
 	GLOBAL_DEF_BASIC(PropertyInfo(Variant::STRING, "application/config/description", PROPERTY_HINT_MULTILINE_TEXT), "");
+	GLOBAL_DEF_BASIC("application/config/version", "");
 	GLOBAL_DEF_INTERNAL(PropertyInfo(Variant::STRING, "application/config/tags"), PackedStringArray());
 	GLOBAL_DEF_BASIC(PropertyInfo(Variant::STRING, "application/run/main_scene", PROPERTY_HINT_FILE, "*.tscn,*.scn,*.res"), "");
 	GLOBAL_DEF("application/run/disable_stdout", false);

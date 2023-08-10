@@ -40,15 +40,7 @@ void NavigationRegion3D::set_enabled(bool p_enabled) {
 
 	enabled = p_enabled;
 
-	if (!is_inside_tree()) {
-		return;
-	}
-
-	if (!enabled) {
-		_region_enter_navigation_map();
-	} else {
-		_region_exit_navigation_map();
-	}
+	NavigationServer3D::get_singleton()->region_set_enabled(region, enabled);
 
 #ifdef DEBUG_ENABLED
 	if (debug_instance.is_valid()) {
@@ -187,10 +179,6 @@ void NavigationRegion3D::_notification(int p_what) {
 }
 
 void NavigationRegion3D::set_navigation_mesh(const Ref<NavigationMesh> &p_navigation_mesh) {
-	if (p_navigation_mesh == navigation_mesh) {
-		return;
-	}
-
 	if (navigation_mesh.is_valid()) {
 		navigation_mesh->disconnect_changed(callable_mp(this, &NavigationRegion3D::_navigation_mesh_changed));
 	}
@@ -257,7 +245,7 @@ void _bake_navigation_mesh(void *p_user_data) {
 	BakeThreadsArgs *args = static_cast<BakeThreadsArgs *>(p_user_data);
 
 	if (args->nav_region->get_navigation_mesh().is_valid()) {
-		Ref<NavigationMesh> nav_mesh = args->nav_region->get_navigation_mesh()->duplicate();
+		Ref<NavigationMesh> nav_mesh = args->nav_region->get_navigation_mesh();
 		Ref<NavigationMeshSourceGeometryData3D> source_geometry_data = args->source_geometry_data;
 
 		NavigationServer3D::get_singleton()->bake_from_source_geometry_data(nav_mesh, source_geometry_data);

@@ -904,7 +904,7 @@ void EditorExportPlatformAndroid::_fix_manifest(const Ref<EditorExportPreset> &p
 	uint32_t string_table_ends = 0;
 	Vector<uint8_t> stable_extra;
 
-	String version_name = p_preset->get("version/name");
+	String version_name = p_preset->get_version("version/name");
 	int version_code = p_preset->get("version/code");
 	String package_name = p_preset->get("package/unique_name");
 
@@ -1829,7 +1829,7 @@ void EditorExportPlatformAndroid::get_export_options(List<ExportOption> *r_optio
 	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "keystore/release_password", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_SECRET), ""));
 
 	r_options->push_back(ExportOption(PropertyInfo(Variant::INT, "version/code", PROPERTY_HINT_RANGE, "1,4096,1,or_greater"), 1));
-	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "version/name"), "1.0"));
+	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "version/name", PROPERTY_HINT_PLACEHOLDER_TEXT, "Leave empty to use project version"), ""));
 
 	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "package/unique_name", PROPERTY_HINT_PLACEHOLDER_TEXT, "ext.domain.name"), "org.godotengine.$genname", false, true));
 	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "package/name", PROPERTY_HINT_PLACEHOLDER_TEXT, "Game Name [default if blank]"), ""));
@@ -1980,7 +1980,7 @@ Error EditorExportPlatformAndroid::run(const Ref<EditorExportPreset> &p_preset, 
 	String output;
 
 	bool remove_prev = EDITOR_GET("export/android/one_click_deploy_clear_previous_install");
-	String version_name = p_preset->get("version/name");
+	String version_name = p_preset->get_version("version/name");
 	String package_name = p_preset->get("package/unique_name");
 
 	if (remove_prev) {
@@ -2225,17 +2225,16 @@ String EditorExportPlatformAndroid::get_apksigner_path(int p_target_sdk, bool p_
 }
 
 bool EditorExportPlatformAndroid::has_valid_export_configuration(const Ref<EditorExportPreset> &p_preset, String &r_error, bool &r_missing_templates, bool p_debug) const {
+#ifdef MODULE_MONO_ENABLED
+	// Don't check for additional errors, as this particular error cannot be resolved.
+	r_error += TTR("Exporting to Android is currently not supported in Godot 4 when using C#/.NET. Use Godot 3 to target Android with C#/Mono instead.") + "\n";
+	r_error += TTR("If this project does not use C#, use a non-C# editor build to export the project.") + "\n";
+	return false;
+#else
+
 	String err;
 	bool valid = false;
 	const bool gradle_build_enabled = p_preset->get("gradle_build/use_gradle_build");
-
-#ifdef MODULE_MONO_ENABLED
-	err += TTR("Exporting to Android is currently not supported in Godot 4 when using C#/.NET. Use Godot 3 to target Android with C#/Mono instead.") + "\n";
-	err += TTR("If this project does not use C#, use a non-C# editor build to export the project.") + "\n";
-	// Don't check for additional errors, as this particular error cannot be resolved.
-	r_error = err;
-	return false;
-#endif
 
 	// Look for export templates (first official, and if defined custom templates).
 
@@ -2366,6 +2365,7 @@ bool EditorExportPlatformAndroid::has_valid_export_configuration(const Ref<Edito
 	}
 
 	return valid;
+#endif // !MODULE_MONO_ENABLED
 }
 
 bool EditorExportPlatformAndroid::has_valid_project_configuration(const Ref<EditorExportPreset> &p_preset, String &r_error) const {
@@ -2893,7 +2893,7 @@ Error EditorExportPlatformAndroid::export_project_helper(const Ref<EditorExportP
 
 		String package_name = get_package_name(p_preset->get("package/unique_name"));
 		String version_code = itos(p_preset->get("version/code"));
-		String version_name = p_preset->get("version/name");
+		String version_name = p_preset->get_version("version/name");
 		String min_sdk_version = p_preset->get("gradle_build/min_sdk");
 		if (!min_sdk_version.is_valid_int()) {
 			min_sdk_version = itos(VULKAN_MIN_SDK_VERSION);
@@ -3111,7 +3111,7 @@ Error EditorExportPlatformAndroid::export_project_helper(const Ref<EditorExportP
 
 	String cmdline = p_preset->get("command_line/extra_args");
 
-	String version_name = p_preset->get("version/name");
+	String version_name = p_preset->get_version("version/name");
 	String package_name = p_preset->get("package/unique_name");
 
 	String apk_expansion_pkey = p_preset->get("apk_expansion/public_key");

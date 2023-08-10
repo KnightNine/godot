@@ -618,12 +618,6 @@ void Window::_clear_window() {
 
 	bool had_focus = has_focus();
 
-	DisplayServer::get_singleton()->window_set_rect_changed_callback(Callable(), window_id);
-	DisplayServer::get_singleton()->window_set_window_event_callback(Callable(), window_id);
-	DisplayServer::get_singleton()->window_set_input_event_callback(Callable(), window_id);
-	DisplayServer::get_singleton()->window_set_input_text_callback(Callable(), window_id);
-	DisplayServer::get_singleton()->window_set_drop_files_callback(Callable(), window_id);
-
 	if (transient_parent && transient_parent->window_id != DisplayServer::INVALID_WINDOW_ID) {
 		DisplayServer::get_singleton()->window_set_transient(window_id, DisplayServer::INVALID_WINDOW_ID);
 	}
@@ -676,17 +670,31 @@ void Window::_propagate_window_notification(Node *p_node, int p_notification) {
 void Window::_event_callback(DisplayServer::WindowEvent p_event) {
 	switch (p_event) {
 		case DisplayServer::WINDOW_EVENT_MOUSE_ENTER: {
+			Window *root = get_tree()->get_root();
+			if (root->gui.windowmanager_window_over) {
+#ifdef DEV_ENABLED
+				WARN_PRINT_ONCE("Entering a window while a window is hovered should never happen in DisplayServer.");
+#endif // DEV_ENABLED
+				root->gui.windowmanager_window_over->_event_callback(DisplayServer::WINDOW_EVENT_MOUSE_EXIT);
+			}
 			_propagate_window_notification(this, NOTIFICATION_WM_MOUSE_ENTER);
-			emit_signal(SNAME("mouse_entered"));
+			root->gui.windowmanager_window_over = this;
 			notification(NOTIFICATION_VP_MOUSE_ENTER);
 			if (DisplayServer::get_singleton()->has_feature(DisplayServer::FEATURE_CURSOR_SHAPE)) {
 				DisplayServer::get_singleton()->cursor_set_shape(DisplayServer::CURSOR_ARROW); //restore cursor shape
 			}
 		} break;
 		case DisplayServer::WINDOW_EVENT_MOUSE_EXIT: {
-			notification(NOTIFICATION_VP_MOUSE_EXIT);
+			Window *root = get_tree()->get_root();
+			if (!root->gui.windowmanager_window_over) {
+#ifdef DEV_ENABLED
+				WARN_PRINT_ONCE("Exiting a window while no window is hovered should never happen in DisplayServer.");
+#endif // DEV_ENABLED
+				return;
+			}
+			root->gui.windowmanager_window_over->_mouse_leave_viewport();
+			root->gui.windowmanager_window_over = nullptr;
 			_propagate_window_notification(this, NOTIFICATION_WM_MOUSE_EXIT);
-			emit_signal(SNAME("mouse_exited"));
 		} break;
 		case DisplayServer::WINDOW_EVENT_FOCUS_IN: {
 			focused = true;
@@ -1283,6 +1291,14 @@ void Window::_notification(int p_what) {
 
 			RS::get_singleton()->viewport_set_active(get_viewport_rid(), false);
 		} break;
+
+		case NOTIFICATION_VP_MOUSE_ENTER: {
+			emit_signal(SceneStringNames::get_singleton()->mouse_entered);
+		} break;
+
+		case NOTIFICATION_VP_MOUSE_EXIT: {
+			emit_signal(SceneStringNames::get_singleton()->mouse_exited);
+		} break;
 	}
 }
 
@@ -1742,6 +1758,10 @@ Rect2i Window::fit_rect_in_parent(Rect2i p_rect, const Rect2i &p_parent_rect) co
 
 Size2 Window::get_contents_minimum_size() const {
 	ERR_READ_THREAD_GUARD_V(Size2());
+	Vector2 ms;
+	if (GDVIRTUAL_CALL(_get_contents_minimum_size, ms)) {
+		return ms;
+	}
 	return _get_contents_minimum_size();
 }
 
@@ -2495,6 +2515,10 @@ bool Window::is_directly_attached_to_screen() const {
 	return is_inside_tree();
 }
 
+bool Window::is_attached_in_viewport() const {
+	return get_embedder();
+}
+
 void Window::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_title", "title"), &Window::set_title);
 	ClassDB::bind_method(D_METHOD("get_title"), &Window::get_title);
@@ -2750,6 +2774,8 @@ void Window::_bind_methods() {
 	BIND_ENUM_CONSTANT(WINDOW_INITIAL_POSITION_CENTER_OTHER_SCREEN);
 	BIND_ENUM_CONSTANT(WINDOW_INITIAL_POSITION_CENTER_SCREEN_WITH_MOUSE_FOCUS);
 	BIND_ENUM_CONSTANT(WINDOW_INITIAL_POSITION_CENTER_SCREEN_WITH_KEYBOARD_FOCUS);
+
+	GDVIRTUAL_BIND(_get_contents_minimum_size);
 }
 
 Window::Window() {
