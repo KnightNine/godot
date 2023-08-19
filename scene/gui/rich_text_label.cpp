@@ -1585,6 +1585,7 @@ float RichTextLabel::_find_click_in_line(ItemFrame *p_frame, int p_line, const V
 					}
 				} else {
 					char_pos = TS->shaped_text_hit_test_position(rid, p_click.x - rect.position.x);
+					char_pos = TS->shaped_text_closest_character_pos(rid, char_pos);
 				}
 			}
 			line_clicked = true;
@@ -2745,6 +2746,9 @@ void RichTextLabel::_thread_function(void *p_userdata) {
 
 void RichTextLabel::_thread_end() {
 	set_physics_process_internal(false);
+	if (!scroll_visible) {
+		vscroll->hide();
+	}
 	if (is_visible_in_tree()) {
 		queue_redraw();
 	}
@@ -2814,7 +2818,6 @@ _FORCE_INLINE_ float RichTextLabel::_update_scroll_exceeds(float p_total_height,
 		} else {
 			scroll_visible = false;
 			scroll_w = 0;
-			vscroll->hide();
 		}
 
 		main->first_resized_line.store(0);
@@ -2862,6 +2865,9 @@ bool RichTextLabel::_validate_line_caches() {
 		if (main->first_resized_line.load() == (int)main->lines.size()) {
 			vscroll->set_value(old_scroll);
 			validating.store(false);
+			if (!scroll_visible) {
+				vscroll->hide();
+			}
 			return true;
 		}
 
@@ -2881,6 +2887,9 @@ bool RichTextLabel::_validate_line_caches() {
 			update_minimum_size();
 		}
 		validating.store(false);
+		if (!scroll_visible) {
+			vscroll->hide();
+		}
 		return true;
 	}
 	validating.store(false);
@@ -2896,6 +2905,9 @@ bool RichTextLabel::_validate_line_caches() {
 		updating.store(true);
 		_process_line_caches();
 		updating.store(false);
+		if (!scroll_visible) {
+			vscroll->hide();
+		}
 		queue_redraw();
 		return true;
 	}

@@ -2446,7 +2446,7 @@ GDScriptParser::ExpressionNode *GDScriptParser::parse_binary_operator(Expression
 	complete_extents(operation);
 
 	if (operation->right_operand == nullptr) {
-		push_error(vformat(R"(Expected expression after "%s" operator.")", op.get_name()));
+		push_error(vformat(R"(Expected expression after "%s" operator.)", op.get_name()));
 	}
 
 	// TODO: Also for unary, ternary, and assignment.
@@ -3035,10 +3035,8 @@ GDScriptParser::ExpressionNode *GDScriptParser::parse_get_node(ExpressionNode *p
 	if (previous.type == GDScriptTokenizer::Token::DOLLAR) {
 		// Detect initial slash, which will be handled in the loop if it matches.
 		match(GDScriptTokenizer::Token::SLASH);
-#ifdef DEBUG_ENABLED
 	} else {
 		get_node->use_dollar = false;
-#endif
 	}
 
 	int context_argument = 0;

@@ -299,6 +299,25 @@ Files extracted from upstream source:
 - `jpge*.{c,h}`
 
 
+## libktx
+
+- Upstream: https://github.com/KhronosGroup/KTX-Software
+- Version: 4.1.0 (d7255fe73cd53b856731ceb9f2c279181d0dbbca, 2023)
+- License: Apache-2.0
+
+Files extracted from upstream source:
+
+- `LICENSE.md`
+- `include/*`
+- `lib/dfdutils/{LICENSES/Apache-2.0.txt,KHR,*.c,*.h,*.inl}`
+- `lib/{basis_sgd.h,basis_transcode.cpp,checkheader.c,filestream.*,formatsize.h,gl_format.h,hashlist.c,ktxint.h,memstream.*,swap.c,texture*,uthash.h,vk_format.h,vkformat_enum.h`
+- `utils/unused.h`
+- `other_include/KHR/*`
+- ifndef-protect NOMINMAX define in `lib/gl_format.h` (see godot.patch)
+- remove `basisu/` prefix from `thirdparty/libktx/lib/basis_transcode.cpp` basisu includes (see godot.patch)
+- comment `VK_FORMAT_ASTC_*x*x*_UNORM_BLOCK_EXT` cases in `lib/dfdutils/vk2dfd.inl` (see godot.patch)
+
+
 ## libogg
 
 - Upstream: https://www.xiph.org/ogg
@@ -713,7 +732,7 @@ instead of `miniz.h` as an external dependency.
 ## thorvg
 
 - Upstream: https://github.com/thorvg/thorvg
-- Version: 0.9.0 (a744006aa1edb918bacf0a415d0a57ca058e25f4, 2023)
+- Version: 0.10.0 (b8c605583fd7de73209a93a1238e1ba72cce2e8f, 2023)
 - License: MIT
 
 Files extracted from upstream source:
