@@ -412,7 +412,7 @@ SceneShaderForwardClustered::ShaderData::ShaderData() :
 
 SceneShaderForwardClustered::ShaderData::~ShaderData() {
 	SceneShaderForwardClustered *shader_singleton = (SceneShaderForwardClustered *)SceneShaderForwardClustered::singleton;
-	ERR_FAIL_COND(!shader_singleton);
+	ERR_FAIL_NULL(shader_singleton);
 	//pipeline variants will clear themselves if shader is gone
 	if (version.is_valid()) {
 		shader_singleton->shader.version_free(version);
@@ -707,6 +707,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.render_mode_defines["shadow_to_opacity"] = "#define USE_SHADOW_TO_OPACITY\n";
 		actions.render_mode_defines["unshaded"] = "#define MODE_UNSHADED\n";
 		actions.render_mode_defines["debug_shadow_splits"] = "#define DEBUG_DRAW_PSSM_SPLITS\n";
+		actions.render_mode_defines["fog_disabled"] = "#define FOG_DISABLED\n";
 
 		actions.base_texture_binding_index = 1;
 		actions.texture_layout_set = RenderForwardClustered::MATERIAL_UNIFORM_SET;

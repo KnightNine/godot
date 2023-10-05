@@ -802,7 +802,9 @@ void fragment_shader(in SceneData scene_data) {
 	float clearcoat_roughness = 0.0;
 	float anisotropy = 0.0;
 	vec2 anisotropy_flow = vec2(1.0, 0.0);
+#ifndef FOG_DISABLED
 	vec4 fog = vec4(0.0);
+#endif // !FOG_DISABLED
 #if defined(CUSTOM_RADIANCE_USED)
 	vec4 custom_radiance = vec4(0.0);
 #endif
@@ -962,6 +964,7 @@ void fragment_shader(in SceneData scene_data) {
 	/////////////////////// FOG //////////////////////
 #ifndef MODE_RENDER_DEPTH
 
+#ifndef FOG_DISABLED
 #ifndef CUSTOM_FOG_USED
 	// fog must be processed as early as possible and then packed.
 	// to maximize VGPR usage
@@ -997,6 +1000,7 @@ void fragment_shader(in SceneData scene_data) {
 	uint fog_rg = packHalf2x16(fog.rg);
 	uint fog_ba = packHalf2x16(fog.ba);
 
+#endif //!FOG_DISABLED
 #endif //!MODE_RENDER_DEPTH
 
 	/////////////////////// DECALS ////////////////////////////////
@@ -1273,9 +1277,10 @@ void fragment_shader(in SceneData scene_data) {
 	} else if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) { // has actual lightmap
 		bool uses_sh = bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_SH_LIGHTMAP);
 		uint ofs = instances.data[instance_index].gi_offset & 0xFFFF;
+		uint slice = instances.data[instance_index].gi_offset >> 16;
 		vec3 uvw;
 		uvw.xy = uv2 * instances.data[instance_index].lightmap_uv_scale.zw + instances.data[instance_index].lightmap_uv_scale.xy;
-		uvw.z = float((instances.data[instance_index].gi_offset >> 16) & 0xFFFF);
+		uvw.z = float(slice);
 
 		if (uses_sh) {
 			uvw.z *= 4.0; //SH textures use 4 times more data
@@ -1284,9 +1289,8 @@ void fragment_shader(in SceneData scene_data) {
 			vec3 lm_light_l1_0 = textureLod(sampler2DArray(lightmap_textures[ofs], SAMPLER_LINEAR_CLAMP), uvw + vec3(0.0, 0.0, 2.0), 0.0).rgb;
 			vec3 lm_light_l1p1 = textureLod(sampler2DArray(lightmap_textures[ofs], SAMPLER_LINEAR_CLAMP), uvw + vec3(0.0, 0.0, 3.0), 0.0).rgb;
 
-			uint idx = instances.data[instance_index].gi_offset >> 20;
-			vec3 n = normalize(lightmaps.data[idx].normal_xform * normal);
-			float en = lightmaps.data[idx].exposure_normalization;
+			vec3 n = normalize(lightmaps.data[ofs].normal_xform * normal);
+			float en = lightmaps.data[ofs].exposure_normalization;
 
 			ambient_light += lm_light_l0 * 0.282095f * en;
 			ambient_light += lm_light_l1n1 * 0.32573 * n.y * en;
@@ -1300,8 +1304,7 @@ void fragment_shader(in SceneData scene_data) {
 			}
 
 		} else {
-			uint idx = instances.data[instance_index].gi_offset >> 20;
-			ambient_light += textureLod(sampler2DArray(lightmap_textures[ofs], SAMPLER_LINEAR_CLAMP), uvw, 0.0).rgb * lightmaps.data[idx].exposure_normalization;
+			ambient_light += textureLod(sampler2DArray(lightmap_textures[ofs], SAMPLER_LINEAR_CLAMP), uvw, 0.0).rgb * lightmaps.data[ofs].exposure_normalization;
 		}
 	}
 #else
@@ -2250,8 +2253,10 @@ void fragment_shader(in SceneData scene_data) {
 	diffuse_light *= 1.0 - metallic;
 	ambient_light *= 1.0 - metallic;
 
+#ifndef FOG_DISABLED
 	//restore fog
 	fog = vec4(unpackHalf2x16(fog_rg), unpackHalf2x16(fog_ba));
+#endif //!FOG_DISABLED
 
 #ifdef MODE_SEPARATE_SPECULAR
 
@@ -2268,10 +2273,14 @@ void fragment_shader(in SceneData scene_data) {
 	specular_buffer = vec4(specular_light, metallic);
 #endif
 
+#ifndef FOG_DISABLED
 	diffuse_buffer.rgb = mix(diffuse_buffer.rgb, fog.rgb, fog.a);
 	specular_buffer.rgb = mix(specular_buffer.rgb, vec3(0.0), fog.a);
+#endif //!FOG_DISABLED
 
 #else //MODE_SEPARATE_SPECULAR
+
+	alpha *= scene_data.pass_alpha_multiplier;
 
 #ifdef MODE_UNSHADED
 	frag_color = vec4(albedo, alpha);
@@ -2280,8 +2289,10 @@ void fragment_shader(in SceneData scene_data) {
 //frag_color = vec4(1.0);
 #endif //USE_NO_SHADING
 
+#ifndef FOG_DISABLED
 	// Draw "fixed" fog before volumetric fog to ensure volumetric fog can appear in front of the sky.
 	frag_color.rgb = mix(frag_color.rgb, fog.rgb, fog.a);
+#endif //!FOG_DISABLED
 
 #endif //MODE_SEPARATE_SPECULAR
 
@@ -2293,7 +2304,7 @@ void fragment_shader(in SceneData scene_data) {
 	vec2 position_uv = position_clip * vec2(0.5, 0.5);
 	vec2 prev_position_uv = prev_position_clip * vec2(0.5, 0.5);
 
-	motion_vector = position_uv - prev_position_uv;
+	motion_vector = prev_position_uv - position_uv;
 #endif
 }
 

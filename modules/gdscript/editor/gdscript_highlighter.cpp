@@ -52,6 +52,7 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 	bool in_keyword = false;
 	bool in_word = false;
 	bool in_number = false;
+	bool in_raw_string = false;
 	bool in_node_path = false;
 	bool in_node_ref = false;
 	bool in_annotation = false;
@@ -234,15 +235,33 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 							}
 
 							if (str[from] == '\\') {
-								Dictionary escape_char_highlighter_info;
-								escape_char_highlighter_info["color"] = symbol_color;
-								color_map[from] = escape_char_highlighter_info;
+								if (!in_raw_string) {
+									Dictionary escape_char_highlighter_info;
+									escape_char_highlighter_info["color"] = symbol_color;
+									color_map[from] = escape_char_highlighter_info;
+								}
 
 								from++;
 
-								Dictionary region_continue_highlighter_info;
-								region_continue_highlighter_info["color"] = region_color;
-								color_map[from + 1] = region_continue_highlighter_info;
+								if (!in_raw_string) {
+									int esc_len = 0;
+									if (str[from] == 'u') {
+										esc_len = 4;
+									} else if (str[from] == 'U') {
+										esc_len = 6;
+									}
+									for (int k = 0; k < esc_len && from < line_length - 1; k++) {
+										if (!is_hex_digit(str[from + 1])) {
+											break;
+										}
+										from++;
+									}
+
+									Dictionary region_continue_highlighter_info;
+									region_continue_highlighter_info["color"] = region_color;
+									color_map[from + 1] = region_continue_highlighter_info;
+								}
+
 								continue;
 							}
 
@@ -304,7 +323,7 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 		// Allow ABCDEF in hex notation.
 		if (is_hex_notation && (is_hex_digit(str[j]) || is_a_digit)) {
 			is_a_digit = true;
-		} else {
+		} else if (str[j] != '_') {
 			is_hex_notation = false;
 		}
 
@@ -327,14 +346,14 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 			} else if (!((str[j] == '-' || str[j] == '+') && str[j - 1] == 'e' && !prev_is_digit) &&
 					!(str[j] == '_' && (prev_is_digit || str[j - 1] == 'b' || str[j - 1] == 'x' || str[j - 1] == '.')) &&
 					!(str[j] == 'e' && (prev_is_digit || str[j - 1] == '_')) &&
-					!(str[j] == '.' && (prev_is_digit || (!prev_is_binary_op && (j > 0 && (str[j - 1] == '-' || str[j - 1] == '+' || str[j - 1] == '~'))))) &&
+					!(str[j] == '.' && (prev_is_digit || (!prev_is_binary_op && (j > 0 && (str[j - 1] == '_' || str[j - 1] == '-' || str[j - 1] == '+' || str[j - 1] == '~'))))) &&
 					!((str[j] == '-' || str[j] == '+' || str[j] == '~') && !is_binary_op && !prev_is_binary_op && str[j - 1] != 'e')) {
 				/* This condition continues number highlighting in special cases.
 				1st row: '+' or '-' after scientific notation (like 3e-4);
 				2nd row: '_' as a numeric separator;
 				3rd row: Scientific notation 'e' and floating points;
 				4th row: Floating points inside the number, or leading if after a unary mathematical operator;
-				5th row: Multiple unary mathematical operators (like ~-7)*/
+				5th row: Multiple unary mathematical operators (like ~-7) */
 				in_number = false;
 			}
 		} else if (str[j] == '.' && !is_binary_op && is_digit(str[j + 1]) && (j == 0 || (j > 0 && str[j - 1] != '.'))) {
@@ -423,7 +442,7 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 
 				if (str[k] == '(') {
 					in_function_name = true;
-				} else if (prev_text == GDScriptTokenizer::get_token_name(GDScriptTokenizer::Token::VAR)) {
+				} else if (prev_text == GDScriptTokenizer::get_token_name(GDScriptTokenizer::Token::VAR) || prev_text == GDScriptTokenizer::get_token_name(GDScriptTokenizer::Token::FOR)) {
 					in_variable_declaration = true;
 				}
 
@@ -461,7 +480,7 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 				in_function_args = false;
 			}
 
-			if (expect_type && (prev_is_char || str[j] == '=') && str[j] != '[') {
+			if (expect_type && (prev_is_char || str[j] == '=') && str[j] != '[' && str[j] != '.') {
 				expect_type = false;
 			}
 
@@ -487,6 +506,12 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 			in_function_name = false;
 			in_lambda = false;
 			in_member_variable = false;
+		}
+
+		if (!in_raw_string && in_region == -1 && str[j] == 'r' && j < line_length - 1 && (str[j + 1] == '"' || str[j + 1] == '\'')) {
+			in_raw_string = true;
+		} else if (in_raw_string && in_region == -1) {
+			in_raw_string = false;
 		}
 
 		// Keep symbol color for binary '&&'. In the case of '&&&' use StringName color for the last ampersand.
@@ -520,7 +545,9 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 			in_annotation = false;
 		}
 
-		if (in_node_ref) {
+		if (in_raw_string) {
+			color = string_color;
+		} else if (in_node_ref) {
 			next_type = NODE_REF;
 			color = node_ref_color;
 		} else if (in_annotation) {
@@ -535,16 +562,11 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 		} else if (in_keyword) {
 			next_type = KEYWORD;
 			color = keyword_color;
-		} else if (in_member_variable) {
-			next_type = MEMBER;
-			color = member_color;
 		} else if (in_signal_declaration) {
 			next_type = SIGNAL;
-
 			color = member_color;
 		} else if (in_function_name) {
 			next_type = FUNCTION;
-
 			if (!in_lambda && prev_text == GDScriptTokenizer::get_token_name(GDScriptTokenizer::Token::FUNC)) {
 				color = function_definition_color;
 			} else {
@@ -559,6 +581,9 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 		} else if (expect_type) {
 			next_type = TYPE;
 			color = type_color;
+		} else if (in_member_variable) {
+			next_type = MEMBER;
+			color = member_color;
 		} else {
 			next_type = IDENTIFIER;
 		}
@@ -656,6 +681,12 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 	for (const String &E : core_types) {
 		class_names[StringName(E)] = basetype_color;
 	}
+	class_names[SNAME("Variant")] = basetype_color;
+	class_names[SNAME("void")] = basetype_color;
+	// `get_core_type_words()` doesn't return primitive types.
+	class_names[SNAME("bool")] = basetype_color;
+	class_names[SNAME("int")] = basetype_color;
+	class_names[SNAME("float")] = basetype_color;
 
 	/* Reserved words. */
 	const Color keyword_color = EDITOR_GET("text_editor/theme/highlighting/keyword_color");
@@ -669,6 +700,10 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 			reserved_keywords[StringName(E)] = keyword_color;
 		}
 	}
+
+	// Highlight `set` and `get` as "keywords" with the function color to avoid conflicts with method calls.
+	reserved_keywords[SNAME("set")] = function_color;
+	reserved_keywords[SNAME("get")] = function_color;
 
 	/* Global functions. */
 	List<StringName> global_function_list;
@@ -692,7 +727,7 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 	}
 
 	/* Strings */
-	const Color string_color = EDITOR_GET("text_editor/theme/highlighting/string_color");
+	string_color = EDITOR_GET("text_editor/theme/highlighting/string_color");
 	List<String> strings;
 	gdscript->get_string_delimiters(&strings);
 	for (const String &string : strings) {

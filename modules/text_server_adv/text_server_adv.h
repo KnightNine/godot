@@ -293,6 +293,11 @@ class TextServerAdvanced : public TextServerExtension {
 		}
 	};
 
+	struct FontAdvancedLinkedVariation {
+		RID base_font;
+		int extra_spacing[4] = { 0, 0, 0, 0 };
+	};
+
 	struct FontAdvanced {
 		Mutex mutex;
 
@@ -316,6 +321,7 @@ class TextServerAdvanced : public TextServerExtension {
 		String style_name;
 		int weight = 400;
 		int stretch = 100;
+		int extra_spacing[4] = { 0, 0, 0, 0 };
 
 		HashMap<Vector2i, FontForSizeAdvanced *, VariantHasher, VariantComparator> cache;
 
@@ -533,8 +539,18 @@ class TextServerAdvanced : public TextServerExtension {
 	// Common data.
 
 	double oversampling = 1.0;
+	mutable RID_PtrOwner<FontAdvancedLinkedVariation> font_var_owner;
 	mutable RID_PtrOwner<FontAdvanced> font_owner;
 	mutable RID_PtrOwner<ShapedTextDataAdvanced> shaped_owner;
+
+	_FORCE_INLINE_ FontAdvanced *_get_font_data(const RID &p_font_rid) const {
+		RID rid = p_font_rid;
+		FontAdvancedLinkedVariation *fdv = font_var_owner.get_or_null(rid);
+		if (unlikely(fdv)) {
+			rid = fdv->base_font;
+		}
+		return font_owner.get_or_null(rid);
+	}
 
 	struct SystemFontKey {
 		String font_name;
@@ -554,9 +570,10 @@ class TextServerAdvanced : public TextServerExtension {
 		double oversampling = 0.0;
 		double embolden = 0.0;
 		Transform2D transform;
+		int extra_spacing[4] = { 0, 0, 0, 0 };
 
 		bool operator==(const SystemFontKey &p_b) const {
-			return (font_name == p_b.font_name) && (antialiasing == p_b.antialiasing) && (italic == p_b.italic) && (mipmaps == p_b.mipmaps) && (msdf == p_b.msdf) && (force_autohinter == p_b.force_autohinter) && (weight == p_b.weight) && (stretch == p_b.stretch) && (msdf_range == p_b.msdf_range) && (msdf_source_size == p_b.msdf_source_size) && (fixed_size == p_b.fixed_size) && (hinting == p_b.hinting) && (subpixel_positioning == p_b.subpixel_positioning) && (variation_coordinates == p_b.variation_coordinates) && (oversampling == p_b.oversampling) && (embolden == p_b.embolden) && (transform == p_b.transform);
+			return (font_name == p_b.font_name) && (antialiasing == p_b.antialiasing) && (italic == p_b.italic) && (mipmaps == p_b.mipmaps) && (msdf == p_b.msdf) && (force_autohinter == p_b.force_autohinter) && (weight == p_b.weight) && (stretch == p_b.stretch) && (msdf_range == p_b.msdf_range) && (msdf_source_size == p_b.msdf_source_size) && (fixed_size == p_b.fixed_size) && (hinting == p_b.hinting) && (subpixel_positioning == p_b.subpixel_positioning) && (variation_coordinates == p_b.variation_coordinates) && (oversampling == p_b.oversampling) && (embolden == p_b.embolden) && (transform == p_b.transform) && (extra_spacing[SPACING_TOP] == p_b.extra_spacing[SPACING_TOP]) && (extra_spacing[SPACING_BOTTOM] == p_b.extra_spacing[SPACING_BOTTOM]) && (extra_spacing[SPACING_SPACE] == p_b.extra_spacing[SPACING_SPACE]) && (extra_spacing[SPACING_GLYPH] == p_b.extra_spacing[SPACING_GLYPH]);
 		}
 
 		SystemFontKey(const String &p_font_name, bool p_italic, int p_weight, int p_stretch, RID p_font, const TextServerAdvanced *p_fb) {
@@ -577,6 +594,10 @@ class TextServerAdvanced : public TextServerExtension {
 			oversampling = p_fb->_font_get_oversampling(p_font);
 			embolden = p_fb->_font_get_embolden(p_font);
 			transform = p_fb->_font_get_transform(p_font);
+			extra_spacing[SPACING_TOP] = p_fb->_font_get_spacing(p_font, SPACING_TOP);
+			extra_spacing[SPACING_BOTTOM] = p_fb->_font_get_spacing(p_font, SPACING_BOTTOM);
+			extra_spacing[SPACING_SPACE] = p_fb->_font_get_spacing(p_font, SPACING_SPACE);
+			extra_spacing[SPACING_GLYPH] = p_fb->_font_get_spacing(p_font, SPACING_GLYPH);
 		}
 	};
 
@@ -605,6 +626,11 @@ class TextServerAdvanced : public TextServerExtension {
 			hash = hash_murmur3_one_real(p_a.transform[0].y, hash);
 			hash = hash_murmur3_one_real(p_a.transform[1].x, hash);
 			hash = hash_murmur3_one_real(p_a.transform[1].y, hash);
+			hash = hash_murmur3_one_32(p_a.extra_spacing[SPACING_TOP], hash);
+			hash = hash_murmur3_one_32(p_a.extra_spacing[SPACING_BOTTOM], hash);
+			hash = hash_murmur3_one_32(p_a.extra_spacing[SPACING_SPACE], hash);
+			hash = hash_murmur3_one_32(p_a.extra_spacing[SPACING_GLYPH], hash);
+
 			return hash_fmix32(hash_murmur3_one_32(((int)p_a.mipmaps) | ((int)p_a.msdf << 1) | ((int)p_a.italic << 2) | ((int)p_a.force_autohinter << 3) | ((int)p_a.hinting << 4) | ((int)p_a.subpixel_positioning << 8) | ((int)p_a.antialiasing << 12), hash));
 		}
 	};
@@ -693,6 +719,7 @@ public:
 	/* Font interface */
 
 	MODBIND0R(RID, create_font);
+	MODBIND1R(RID, create_font_linked_variation, const RID &);
 
 	MODBIND2(font_set_data, const RID &, const PackedByteArray &);
 	MODBIND3(font_set_data_ptr, const RID &, const uint8_t *, int64_t);
@@ -747,6 +774,9 @@ public:
 
 	MODBIND2(font_set_embolden, const RID &, double);
 	MODBIND1RC(double, font_get_embolden, const RID &);
+
+	MODBIND3(font_set_spacing, const RID &, SpacingType, int64_t);
+	MODBIND2RC(int64_t, font_get_spacing, const RID &, SpacingType);
 
 	MODBIND2(font_set_transform, const RID &, const Transform2D &);
 	MODBIND1RC(Transform2D, font_get_transform, const RID &);

@@ -17,6 +17,33 @@ Files extracted from upstream source:
 - `license.txt`
 
 
+## amd-fsr2
+
+- Upstream: https://github.com/GPUOpen-Effects/FidelityFX-FSR2
+- Version: 2.2.1 (1680d1edd5c034f88ebbbb793d8b88f8842cf804, 2023)
+- License: MIT
+
+Files extracted from upstream source:
+
+- `ffx_*.cpp` and `ffx_*.h` from `src/ffx-fsr2-api`
+- `shaders` folder from `src/ffx-fsr2-api` with `ffx_*.hlsl` files excluded
+- `LICENSE.txt`
+
+Apply `patches` to add the new options required by Godot and general compilation fixes.
+
+
+## angle
+
+- Upstream: https://chromium.googlesource.com/angle/angle/
+- Version: git (chromium/5907, 430a4f559cbc2bcd5d026e8b36ee46ddd80e9651, 2023)
+- License: BSD-3-Clause
+
+Files extracted from upstream source:
+
+- `include/*`
+- `LICENSE`
+
+
 ## astcenc
 
 - Upstream: https://github.com/ARM-software/astc-encoder
@@ -62,6 +89,18 @@ Files extracted from upstream source:
 - Upstream: Mozilla, via https://github.com/bagder/ca-bundle
 - Version: git (3aaca635bad074a0ce5c15fa8aa0dff47f5c639a, 2023)
 - License: MPL 2.0
+
+
+## clipper2
+
+- Upstream: https://github.com/AngusJohnson/Clipper2
+- Version: 1.2.2  (756c5079aacab5837e812a143c59dc48a09f22e7, 2023)
+- License: Boost Software License 1.0
+
+Files extracted from upstream source:
+
+- `CPP/Clipper2Lib` folder
+- `LICENSE`
 
 
 ## cvtt
@@ -154,38 +193,81 @@ Files extracted from upstream source:
 
 ## fonts
 
-- `NotoSans*.woff2`, `NotoNaskhArabicUI_*.woff2`:
-  * Upstream: https://github.com/googlefonts/noto-fonts
-  * Version: v2017-10-24-phase3-second-cleanup
-  * License: OFL-1.1
-  * Comment: Use UI font variant if available, because it has tight vertical metrics and
-    good for UI.
-- `JetBrainsMono_Regular.woff2`:
-	* Upstream: https://github.com/JetBrains/JetBrainsMono
-  * Version: 2.242
-  * License: OFL-1.1
 - `DroidSans*.woff2`:
   * Upstream: https://android.googlesource.com/platform/frameworks/base/+/master/data/fonts/
   * Version: ? (pre-2014 commit when DroidSansJapanese.ttf was obsoleted)
   * License: Apache 2.0
+- `JetBrainsMono_Regular.woff2`:
+  * Upstream: https://github.com/JetBrains/JetBrainsMono
+  * Version: 2.304 (cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9, 2023)
+  * License: OFL-1.1
+- `NotoNaskhArabicUI*.woff2`:
+  * Upstream: https://github.com/notofonts/arabic
+  * Version: 2.014 (133ccaebf922ca080a7eef22998611ac3c242df9, 2022)
+  * License: OFL-1.1
+- `NotoSans*.woff2`:
+  * Upstream: https://github.com/notofonts/latin-greek-cyrillic
+  * Version: 2.012 (9ea0c8d37bff0c0067b03777f40aa04f2bf78f99, 2023)
+  * License: OFL-1.1
+- `NotoSansBengali*.woff2`:
+  * Upstream: https://github.com/notofonts/bengali
+  * Version: 2.003 (020a5701f6fc6a363d5eccbae45e37714c0ad686, 2022)
+  * License: OFL-1.1
+- `NotoSansDevanagari*.woff2`:
+  * Upstream: https://github.com/notofonts/devanagari
+  * Version: 2.004 (f8f27e49da0ec9e5e38ecf3628671f05b24dd955, 2023)
+  * License: OFL-1.1
+- `NotoSansGeorgian*.woff2`:
+  * Upstream: https://github.com/notofonts/georgian
+  * Version: 2.002 (243ec9aa1d4ec58cc42120d30faac1a102fbfeb9, 2022)
+  * License: OFL-1.1
+- `NotoSansHebrew*.woff2`:
+  * Upstream: https://github.com/notofonts/hebrew
+  * Version: 2.003 (caa7ab0614fb5b37cc003d9bf3d7d3e765331110, 2022)
+  * License: OFL-1.1
+- `NotoSansMalayalam*.woff2`:
+  * Upstream: https://github.com/notofonts/malayalam
+  * Version: 2.104 (0fd65e553a6af3dc1c09ed39dfe8933e01c17b32, 2023)
+  * License: OFL-1.1
+- `NotoSansOriya*.woff2`:
+  * Upstream: https://github.com/notofonts/oriya
+  * Version: 2.005 (9377f242b247df12d0bf4cecd93b9c4b18036fbd, 2023)
+  * License: OFL-1.1
+- `NotoSansSinhala*.woff2`:
+  * Upstream: https://github.com/notofonts/sinhala
+  * Version: 2.006 (66e5a2ed9797e575222d6e7c5b3710c7bf68be79, 2022)
+  * License: OFL-1.1
+- `NotoSansTamil*.woff2`:
+  * Upstream: https://github.com/notofonts/tamil
+  * Version: 2.004 (f34a08d1ae3fa810581f63410296d971bdcd62dc, 2023)
+  * License: OFL-1.1
+- `NotoSansTelugu*.woff2`:
+  * Upstream: https://github.com/notofonts/telugu
+  * Version: 2.004 (68a6a8170cba5b2e9b45029ef36994961e8f614c, 2023)
+  * License: OFL-1.1
+- `NotoSansThai*.woff2`:
+  * Upstream: https://github.com/notofonts/thai
+  * Version: 2.001 (09af528011390f35abf15cf86068dae208f512c4, 2022)
+  * License: OFL-1.1
 - `OpenSans_SemiBold.woff2`:
   * Upstream: https://fonts.google.com/specimen/Open+Sans
   * Version: 1.10 (downloaded from Google Fonts in February 2021)
   * License: Apache 2.0
-- All fonts are converted from the `.ttf` sources using `https://github.com/google/woff2` tool.
+- All fonts are converted from the unhinted `.ttf` sources using `https://github.com/google/woff2` tool.
+- Comment: Use UI font variant if available, because it has tight vertical metrics and good for UI.
 
 
 ## freetype
 
 - Upstream: https://www.freetype.org
-- Version: 2.13.1 (e4586d960f339cf75e2e0b34aee30a0ed8353c0d, 2023)
+- Version: 2.13.2 (920c5502cc3ddda88f6c7d85ee834ac611bb11cc, 2023)
 - License: FreeType License (BSD-like)
 
 Files extracted from upstream source:
 
 - `src/` folder, minus the `dlg` and `tools` subfolders
   * These files can be removed: `.dat`, `.diff`, `.mk`, `.rc`, `README*`
-  * In `src/gzip/`, remove zlib files (everything but `ftgzip.c` and `ftzconf.h`)
+  * In `src/gzip/`, keep only `ftgzip.c`
 - `include/` folder, minus the `dlg` subfolder
 - `LICENSE.TXT` and `docs/FTL.TXT`
 
@@ -200,7 +282,10 @@ Files extracted from upstream source:
 - `LICENSE`
 
 Files generated from [upstream web instance](https://gen.glad.sh/):
+- `EGL/eglplatform.h`
 - `KHR/khrplatform.h`
+- `egl.c`
+- `glad/egl.h`
 - `gl.c`
 - `glad/gl.h`
 - `glx.c`
@@ -209,25 +294,24 @@ Files generated from [upstream web instance](https://gen.glad.sh/):
 See the permalinks in `glad/gl.h` and `glad/glx.h` to regenrate the files with
 a new version of the web instance.
 
+Some changes have been made in order to allow loading OpenGL and OpenGLES APIs at the same time.
+See the patches in the `patches` directory.
+
 
 ## glslang
 
 - Upstream: https://github.com/KhronosGroup/glslang
-- Version: 12.2.0 / sdk-1.3.250.0 (d1517d64cfca91f573af1bf7341dc3a5113349c0, 2023)
+- Version: sdk-1.3.261.1 (76b52ebf77833908dc4c0dd6c70a9c357ac720bd, 2023)
 - License: glslang
 
 Version should be kept in sync with the one of the used Vulkan SDK (see `vulkan`
-section). Check Vulkan-ValidationLayers at the matching SDK tag for the known
-good glslang commit: https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/scripts/known_good.json
-
-When updating, also review that our `modules/glslang/glslang_resource_limits.h`
-copy of `DefaultTBuiltInResource` is in sync with the one defined upstream in
-`StandAlone/ResourceLimits.cpp`.
+section).
 
 Files extracted from upstream source:
 
 - `glslang` (except `glslang/HLSL` and `glslang/ExtensionHeaders`),
-  `OGLCompilersDLL`, `SPIRV`, w/o `CInterface` folders (depend on `StandAlone`)
+  `OGLCompilersDLL`, `SPIRV`
+  * Remove C interface code: `CInterface` folders, files matching `"*_c[_\.]*"`
 - Run `cmake . && make` and copy generated `include/glslang/build_info.h`
   to `glslang/build_info.h`
 - `LICENSE.txt`
@@ -250,7 +334,7 @@ Files extracted from upstream source:
 ## harfbuzz
 
 - Upstream: https://github.com/harfbuzz/harfbuzz
-- Version: 8.0.0 (b4305532a7746422e0b615eee6304119c1092fd8, 2023)
+- Version: 8.1.1 (1d665c2b521512cdd56964138fc601debd1f1177, 2023)
 - License: MIT
 
 Files extracted from upstream source:
@@ -310,12 +394,11 @@ Files extracted from upstream source:
 - `LICENSE.md`
 - `include/*`
 - `lib/dfdutils/{LICENSES/Apache-2.0.txt,KHR,*.c,*.h,*.inl}`
-- `lib/{basis_sgd.h,basis_transcode.cpp,checkheader.c,filestream.*,formatsize.h,gl_format.h,hashlist.c,ktxint.h,memstream.*,swap.c,texture*,uthash.h,vk_format.h,vkformat_enum.h`
+- `lib/{basis_sgd.h,basis_transcode.cpp,checkheader.c,filestream.*,formatsize.h,gl_format.h,hashlist.c,ktxint.h,memstream.*,swap.c,texture*,uthash.h,vk_format.h,vkformat_enum.h}`
 - `utils/unused.h`
 - `other_include/KHR/*`
-- ifndef-protect NOMINMAX define in `lib/gl_format.h` (see godot.patch)
-- remove `basisu/` prefix from `thirdparty/libktx/lib/basis_transcode.cpp` basisu includes (see godot.patch)
-- comment `VK_FORMAT_ASTC_*x*x*_UNORM_BLOCK_EXT` cases in `lib/dfdutils/vk2dfd.inl` (see godot.patch)
+
+Some Godot-specific changes are applied via `godot.patch`.
 
 
 ## libogg
@@ -375,7 +458,7 @@ Files extracted from upstream source:
 ## libwebp
 
 - Upstream: https://chromium.googlesource.com/webm/libwebp/
-- Version: 1.3.1 (fd7bb21c0cb56e8a82e9bfa376164b842f433f3b, 2023)
+- Version: 1.3.2 (ca332209cb5567c9b249c86788cb2dbf8847e760, 2023)
 - License: BSD-3-Clause
 
 Files extracted from upstream source:
@@ -397,9 +480,8 @@ File extracted from upstream release tarball:
 - All `*.h` from `include/mbedtls/` to `thirdparty/mbedtls/include/mbedtls/` except `config_psa.h` and `psa_util.h`.
 - All `*.c` and `*.h` from `library/` to `thirdparty/mbedtls/library/` except those starting with `psa_*`.
 - The `LICENSE` file.
-- Applied the patch in `patches/1453.diff` to fix UWP build (upstream PR:
-  https://github.com/ARMmbed/mbedtls/pull/1453).
-  Applied the patch in `patches/windows-arm64-hardclock.diff`
+- Applied the patch in `patches/windows-arm64-hardclock.diff`.
+  Applied the patch in `aesni-no-arm-intrinsics.patch` to fix MSVC ARM build.
 - Added 2 files `godot_core_mbedtls_platform.c` and `godot_core_mbedtls_config.h`
   providing configuration for light bundling with core.
 - Added the file `godot_module_mbedtls_config.h` to customize the build configuration when bundling the full library.
@@ -459,7 +541,7 @@ that file when upgrading.
 ## minizip
 
 - Upstream: https://www.zlib.net
-- Version: 1.2.13 (zlib contrib, 2022)
+- Version: 1.3 (zlib contrib, 2023)
 - License: zlib
 
 Files extracted from the upstream source:
@@ -568,37 +650,6 @@ Files extracted from the upstream source:
 - `nvapi_minimal.h` was created by using `nvapi.h` from upstream and removing unnecessary code.
 
 
-## oidn
-
-- Upstream: https://github.com/OpenImageDenoise/oidn
-- Version: 1.1.0 (c58c5216db05ceef4cde5a096862f2eeffd14c06, 2019)
-- License: Apache 2.0
-
-Files extracted from upstream source:
-
-- common/* (except tasking.* and CMakeLists.txt)
-- core/*
-- include/OpenImageDenoise/* (except version.h.in)
-- LICENSE.txt
-- mkl-dnn/include/*
-- mkl-dnn/src/* (except CMakeLists.txt)
-- weights/rtlightmap_hdr.tza
-- scripts/resource_to_cpp.py
-
-Modified files:
-Modifications are marked with `// -- GODOT start --` and `// -- GODOT end --`.
-Patch files are provided in `oidn/patches/`.
-
-- core/autoencoder.cpp
-- core/autoencoder.h
-- core/common.h
-- core/device.cpp
-- core/device.h
-- core/transfer_function.cpp
-
-- scripts/resource_to_cpp.py (used in modules/denoise/resource_to_cpp.py)
-
-
 ## openxr
 
 - Upstream: https://github.com/KhronosGroup/OpenXR-SDK
@@ -683,10 +734,11 @@ proposed by these libraries and better integrate them with Godot.
 ## spirv-reflect
 
 - Upstream: https://github.com/KhronosGroup/SPIRV-Reflect
-- Version: sdk-1.3.250.0 (1fd43331f0bd77cc0f421745781f79a14d8f2bb1, 2023)
+- Version: sdk-1.3.261.1 (d7e316e7d592d16ac58f1fe39b1df7babfe65c0d, 2023)
 - License: Apache 2.0
 
-Now tracks Vulkan SDK releases, so keep it in sync with volk / vulkan.
+Version should be kept in sync with the one of the used Vulkan SDK (see `vulkan`
+section).
 
 Files extracted from upstream source:
 
@@ -732,7 +784,7 @@ instead of `miniz.h` as an external dependency.
 ## thorvg
 
 - Upstream: https://github.com/thorvg/thorvg
-- Version: 0.10.0 (b8c605583fd7de73209a93a1238e1ba72cce2e8f, 2023)
+- Version: 0.11.0 (12260198d12719ea20939b68492accfc155d9ff5, 2023)
 - License: MIT
 
 Files extracted from upstream source:
@@ -761,7 +813,7 @@ folder.
 ## volk
 
 - Upstream: https://github.com/zeux/volk
-- Version: sdk-1.3.250.0 (b3bc21e584f97400b6884cb2a541a56c6a5ddba3, 2023)
+- Version: sdk-1.3.261.1 (c1fc502109e539078d53c90ee1da9f32abbb0054, 2023)
 - License: MIT
 
 Unless there is a specific reason to package a more recent version, please stick
@@ -780,7 +832,7 @@ Files extracted from upstream source:
 ## vulkan
 
 - Upstream: https://github.com/KhronosGroup/Vulkan-Headers
-- Version: sdk-1.3.250 (bae9700cd9425541a0f6029957f005e5ad3ef660, 2023)
+- Version: sdk-1.3.261.1 (85c2334e92e215cce34e8e0ed8b2dce4700f4a50, 2023)
 - License: Apache 2.0
 
 The vendored version should be kept in sync with volk, see above.
@@ -788,13 +840,14 @@ The vendored version should be kept in sync with volk, see above.
 Files extracted from upstream source:
 
 - `include/`
-- `LICENSE.txt`
+- `LICENSE.md`
 
 `vk_enum_string_helper.h` is taken from the matching `Vulkan-ValidationLayers`
 SDK release: https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/layers/vulkan/generated/vk_enum_string_helper.h
 
 `vk_mem_alloc.h` is taken from https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-Version: 3.0.1 (2022-06-10), commit `cfdc0f8775ab3258a3b9c4e47d8ce4b6f52a5441`
+Version: git (e88fff957b94f4b541ccac67a4290f07e52aa610), as advised by upstream:
+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/issues/318
 `vk_mem_alloc.cpp` is a Godot file and should be preserved on updates.
 
 Patches in the `patches` directory should be re-applied after updates.
@@ -832,12 +885,12 @@ Files extracted from upstream source:
 ## zlib
 
 - Upstream: https://www.zlib.net
-- Version: 1.2.13 (2022)
+- Version: 1.3 (2023)
 - License: zlib
 
 Files extracted from upstream source:
 
-- All `*.c` and `*.h` files
+- All `*.c` and `*.h` files, minus `infback.c`
 - `LICENSE`
 
 

@@ -2782,7 +2782,7 @@ void Animation::_track_get_key_indices_in_range(const Vector<T> &p_array, double
 			p_indices->push_back(i);
 		}
 	} else {
-		for (int i = to; i >= to; i--) {
+		for (int i = to; i >= from; i--) {
 			p_indices->push_back(i);
 		}
 	}
@@ -4484,7 +4484,7 @@ struct AnimationCompressionDataState {
 
 	void commit_temp_packets() {
 		if (temp_packets.size() == 0) {
-			return; //nohing to do
+			return; // Nothing to do.
 		}
 //#define DEBUG_PACKET_PUSH
 #ifdef DEBUG_PACKET_PUSH
@@ -5715,8 +5715,8 @@ Variant Animation::subtract_variant(const Variant &a, const Variant &b) {
 Variant Animation::blend_variant(const Variant &a, const Variant &b, float c) {
 	if (a.get_type() != b.get_type()) {
 		if (a.is_num() && b.is_num()) {
-			real_t va = a;
-			real_t vb = b;
+			double va = a;
+			double vb = b;
 			return va + vb * c;
 		}
 		return a;
@@ -5727,7 +5727,7 @@ Variant Animation::blend_variant(const Variant &a, const Variant &b, float c) {
 			return Variant();
 		}
 		case Variant::INT: {
-			return int((a.operator int64_t()) + (b.operator int64_t()) * c + 0.5);
+			return int64_t((a.operator int64_t()) + (b.operator int64_t()) * c + 0.5);
 		}
 		case Variant::FLOAT: {
 			return (a.operator double()) + (b.operator double()) * c;
@@ -5865,8 +5865,8 @@ Variant Animation::blend_variant(const Variant &a, const Variant &b, float c) {
 Variant Animation::interpolate_variant(const Variant &a, const Variant &b, float c) {
 	if (a.get_type() != b.get_type()) {
 		if (a.is_num() && b.is_num()) {
-			real_t va = a;
-			real_t vb = b;
+			double va = a;
+			double vb = b;
 			return va + (vb - va) * c;
 		}
 		return a;
@@ -5878,11 +5878,11 @@ Variant Animation::interpolate_variant(const Variant &a, const Variant &b, float
 		}
 		case Variant::INT: {
 			const int64_t va = a.operator int64_t();
-			return int(va + ((b.operator int64_t()) - va) * c);
+			return int64_t(va + ((b.operator int64_t()) - va) * c);
 		}
 		case Variant::FLOAT: {
-			const real_t va = a.operator real_t();
-			return va + ((b.operator real_t()) - va) * c;
+			const double va = a.operator double();
+			return va + ((b.operator double()) - va) * c;
 		}
 		case Variant::VECTOR2: {
 			return (a.operator Vector2()).lerp(b.operator Vector2(), c);

@@ -253,11 +253,22 @@ class EditorInspectorCategory : public Control {
 	GDCLASS(EditorInspectorCategory, Control);
 
 	friend class EditorInspector;
+
+	// Right-click context menu options.
+	enum ClassMenuOption {
+		MENU_OPEN_DOCS,
+	};
+
 	Ref<Texture2D> icon;
 	String label;
+	String doc_class_name;
+	PopupMenu *menu = nullptr;
+
+	void _handle_menu_option(int p_option);
 
 protected:
 	void _notification(int p_what);
+	virtual void gui_input(const Ref<InputEvent> &p_event) override;
 
 public:
 	virtual Size2 get_minimum_size() const override;
@@ -361,7 +372,9 @@ class EditorInspectorArray : public EditorInspectorSection {
 		PanelContainer *panel = nullptr;
 		MarginContainer *margin = nullptr;
 		HBoxContainer *hbox = nullptr;
+		Button *move_up = nullptr;
 		TextureRect *move_texture_rect = nullptr;
+		Button *move_down = nullptr;
 		Label *number = nullptr;
 		VBoxContainer *vbox = nullptr;
 		Button *erase = nullptr;
@@ -488,13 +501,7 @@ class EditorInspector : public ScrollContainer {
 	int property_focusable;
 	int update_scroll_request;
 
-	struct PropertyDocInfo {
-		String description;
-		String path;
-	};
-
-	HashMap<StringName, HashMap<StringName, PropertyDocInfo>> doc_info_cache;
-	HashMap<StringName, String> class_descr_cache;
+	HashMap<StringName, HashMap<StringName, String>> doc_path_cache;
 	HashSet<StringName> restart_request_props;
 
 	HashMap<ObjectID, int> scroll_cache;
@@ -589,7 +596,7 @@ public:
 	void set_use_filter(bool p_use);
 	void register_text_enter(Node *p_line_edit);
 
-	void set_use_folding(bool p_enable);
+	void set_use_folding(bool p_use_folding, bool p_update_tree = true);
 	bool is_using_folding();
 
 	void collapse_all_folding();

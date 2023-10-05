@@ -59,6 +59,7 @@ void GDScriptLanguage::get_string_delimiters(List<String> *p_delimiters) const {
 	p_delimiters->push_back("' '");
 	p_delimiters->push_back("\"\"\" \"\"\"");
 	p_delimiters->push_back("''' '''");
+	// NOTE: StringName, NodePath and r-strings are not listed here.
 }
 
 bool GDScriptLanguage::is_using_templates() {
@@ -75,19 +76,25 @@ Ref<Script> GDScriptLanguage::make_template(const String &p_template, const Stri
 #endif
 	if (!type_hints) {
 		processed_template = processed_template.replace(": int", "")
+									 .replace(": Shader.Mode", "")
+									 .replace(": VisualShader.Type", "")
+									 .replace(": float", "")
 									 .replace(": String", "")
 									 .replace(": Array[String]", "")
-									 .replace(": float", "")
+									 .replace(": Node", "")
 									 .replace(": CharFXTransform", "")
 									 .replace(":=", "=")
-									 .replace(" -> String", "")
-									 .replace(" -> int", "")
+									 .replace(" -> void", "")
 									 .replace(" -> bool", "")
-									 .replace(" -> void", "");
+									 .replace(" -> int", "")
+									 .replace(" -> PortType", "")
+									 .replace(" -> String", "")
+									 .replace(" -> Object", "");
 	}
 
 	processed_template = processed_template.replace("_BASE_", p_base_class_name)
-								 .replace("_CLASS_", p_class_name.to_pascal_case())
+								 .replace("_CLASS_SNAKE_CASE_", p_class_name.to_snake_case().validate_identifier())
+								 .replace("_CLASS_", p_class_name.to_pascal_case().validate_identifier())
 								 .replace("_TS_", _get_indentation());
 	scr->set_source_code(processed_template);
 	return scr;
@@ -188,10 +195,6 @@ bool GDScriptLanguage::validate(const String &p_script, const String &p_path, Li
 #endif
 
 	return true;
-}
-
-bool GDScriptLanguage::has_named_classes() const {
-	return false;
 }
 
 bool GDScriptLanguage::supports_builtin_mode() const {
@@ -500,7 +503,7 @@ String GDScriptLanguage::make_function(const String &p_class, const String &p_na
 			s += p_args[i].get_slice(":", 0);
 			if (th) {
 				String type = p_args[i].get_slice(":", 1);
-				if (!type.is_empty() && type != "var") {
+				if (!type.is_empty()) {
 					s += ": " + type;
 				}
 			}
@@ -1207,6 +1210,9 @@ static void _find_identifiers_in_base(const GDScriptCompletionIdentifier &p_base
 					for (const PropertyInfo &E : members) {
 						if (!String(E.name).contains("/")) {
 							ScriptLanguage::CodeCompletionOption option(E.name, ScriptLanguage::CODE_COMPLETION_KIND_MEMBER);
+							if (GDScriptParser::theme_color_names.has(E.name)) {
+								option.theme_color_name = GDScriptParser::theme_color_names[E.name];
+							}
 							r_result.insert(option.display, option);
 						}
 					}
@@ -1456,8 +1462,13 @@ static bool _guess_expression_type(GDScriptParser::CompletionContext &p_context,
 	if (p_expression->is_constant) {
 		// Already has a value, so just use that.
 		r_type = _type_from_variant(p_expression->reduced_value);
-		if (p_expression->get_datatype().kind == GDScriptParser::DataType::ENUM) {
-			r_type.type = p_expression->get_datatype();
+		switch (p_expression->get_datatype().kind) {
+			case GDScriptParser::DataType::ENUM:
+			case GDScriptParser::DataType::CLASS:
+				r_type.type = p_expression->get_datatype();
+				break;
+			default:
+				break;
 		}
 		found = true;
 	} else {
@@ -3383,6 +3394,12 @@ static Error _lookup_symbol_from_base(const GDScriptParser::DataType &p_base, co
 			r_result.class_name = Variant::get_type_name(t);
 			return OK;
 		}
+	}
+
+	if ("Variant" == p_symbol) {
+		r_result.type = ScriptLanguage::LOOKUP_RESULT_CLASS;
+		r_result.class_name = "Variant";
+		return OK;
 	}
 
 	if ("PI" == p_symbol || "TAU" == p_symbol || "INF" == p_symbol || "NAN" == p_symbol) {

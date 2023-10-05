@@ -743,7 +743,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
 	_setup_environment(p_render_data, is_reflection_probe, screen_size, !is_reflection_probe, p_default_bg_color, false);
 
-	_update_render_base_uniform_set(); //may have changed due to the above (light buffer enlarged, as an example)
+	_update_render_base_uniform_set(rb->get_samplers()); //may have changed due to the above (light buffer enlarged, as an example)
 
 	RD::get_singleton()->draw_command_end_label(); // Render Setup
 
@@ -752,7 +752,8 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	bool draw_sky = false;
 	bool draw_sky_fog_only = false;
 	// We invert luminance_multiplier for sky so that we can combine it with exposure value.
-	float sky_energy_multiplier = 1.0 / _render_buffers_get_luminance_multiplier();
+	float inverse_luminance_multiplier = 1.0 / _render_buffers_get_luminance_multiplier();
+	float sky_energy_multiplier = inverse_luminance_multiplier;
 
 	Color clear_color = p_default_bg_color;
 	bool keep_color = false;
@@ -822,9 +823,9 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 				correction.set_depth_correction(true);
 				Projection projection = correction * p_render_data->scene_data->cam_projection;
 
-				sky.setup_sky(p_render_data->environment, p_render_data->render_buffers, *p_render_data->lights, p_render_data->camera_attributes, 1, &projection, &eye_offset, p_render_data->scene_data->cam_transform, projection, screen_size, this);
+				sky.setup_sky(p_render_data->environment, p_render_data->render_buffers, *p_render_data->lights, p_render_data->camera_attributes, 1, &projection, &eye_offset, p_render_data->scene_data->cam_transform, projection, screen_size, Vector2(0.0f, 0.0f), this);
 			} else {
-				sky.setup_sky(p_render_data->environment, p_render_data->render_buffers, *p_render_data->lights, p_render_data->camera_attributes, p_render_data->scene_data->view_count, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform, p_render_data->scene_data->cam_projection, screen_size, this);
+				sky.setup_sky(p_render_data->environment, p_render_data->render_buffers, *p_render_data->lights, p_render_data->camera_attributes, p_render_data->scene_data->view_count, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform, p_render_data->scene_data->cam_projection, screen_size, p_render_data->scene_data->taa_jitter, this);
 			}
 
 			sky_energy_multiplier *= bg_energy_multiplier;
@@ -880,6 +881,9 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 
 		p_render_data->scene_data->directional_light_count = p_render_data->directional_light_count;
 
+		// Shadow pass can change the base uniform set samplers.
+		_update_render_base_uniform_set(rb->get_samplers());
+
 		_setup_environment(p_render_data, is_reflection_probe, screen_size, !is_reflection_probe, p_default_bg_color, p_render_data->render_buffers.is_valid());
 
 		if (using_subpass_transparent && using_subpass_post_process) {
@@ -899,14 +903,14 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			// regular forward for now
 			Vector<Color> c;
 			{
-				Color cc = clear_color.srgb_to_linear();
+				Color cc = clear_color.srgb_to_linear() * inverse_luminance_multiplier;
 				if (rb_data.is_valid()) {
 					cc.a = 0; // For transparent viewport backgrounds.
 				}
 				c.push_back(cc); // Our render buffer.
 				if (rb_data.is_valid()) {
 					if (p_render_data->render_buffers->get_msaa_3d() != RS::VIEWPORT_MSAA_DISABLED) {
-						c.push_back(clear_color.srgb_to_linear()); // Our resolve buffer.
+						c.push_back(clear_color.srgb_to_linear() * inverse_luminance_multiplier); // Our resolve buffer.
 					}
 					if (using_subpass_post_process) {
 						c.push_back(Color()); // Our 2D buffer we're copying into.
@@ -1240,7 +1244,7 @@ void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, i
 void RenderForwardMobile::_render_shadow_begin() {
 	scene_state.shadow_passes.clear();
 	RD::get_singleton()->draw_command_begin_label("Shadow Setup");
-	_update_render_base_uniform_set();
+	_update_render_base_uniform_set(RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
 
 	render_list[RENDER_LIST_SECONDARY].clear();
 }
@@ -1347,7 +1351,7 @@ void RenderForwardMobile::_render_material(const Transform3D &p_cam_transform, c
 
 	RD::get_singleton()->draw_command_begin_label("Render 3D Material");
 
-	_update_render_base_uniform_set();
+	_update_render_base_uniform_set(RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
 
 	RenderSceneDataRD scene_data;
 	scene_data.cam_projection = p_cam_projection;
@@ -1398,7 +1402,7 @@ void RenderForwardMobile::_render_uv2(const PagedArray<RenderGeometryInstance *>
 
 	RD::get_singleton()->draw_command_begin_label("Render UV2");
 
-	_update_render_base_uniform_set();
+	_update_render_base_uniform_set(RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
 
 	RenderSceneDataRD scene_data;
 	scene_data.dual_paraboloid_side = 0;
@@ -1472,7 +1476,7 @@ void RenderForwardMobile::_render_particle_collider_heightfield(RID p_fb, const 
 
 	RD::get_singleton()->draw_command_begin_label("Render Collider Heightfield");
 
-	_update_render_base_uniform_set();
+	_update_render_base_uniform_set(RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
 
 	RenderSceneDataRD scene_data;
 	scene_data.cam_projection = p_cam_projection;
@@ -1516,9 +1520,8 @@ void RenderForwardMobile::base_uniforms_changed() {
 	render_base_uniform_set = RID();
 }
 
-void RenderForwardMobile::_update_render_base_uniform_set() {
+void RenderForwardMobile::_update_render_base_uniform_set(const RendererRD::MaterialStorage::Samplers &p_samplers) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
-	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
 	if (render_base_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set) || (lightmap_texture_array_version != light_storage->lightmap_array_get_version())) {
 		if (render_base_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set)) {
@@ -1546,22 +1549,22 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			RID sampler;
 			switch (decals_get_filter()) {
 				case RS::DECAL_FILTER_NEAREST: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::DECAL_FILTER_LINEAR: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::DECAL_FILTER_NEAREST_MIPMAPS: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::DECAL_FILTER_LINEAR_MIPMAPS: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::DECAL_FILTER_NEAREST_MIPMAPS_ANISOTROPIC: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::DECAL_FILTER_LINEAR_MIPMAPS_ANISOTROPIC: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 			}
 
@@ -1576,22 +1579,22 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			RID sampler;
 			switch (light_projectors_get_filter()) {
 				case RS::LIGHT_PROJECTOR_FILTER_NEAREST: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::LIGHT_PROJECTOR_FILTER_LINEAR: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::LIGHT_PROJECTOR_FILTER_NEAREST_MIPMAPS: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::LIGHT_PROJECTOR_FILTER_LINEAR_MIPMAPS: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::LIGHT_PROJECTOR_FILTER_NEAREST_MIPMAPS_ANISOTROPIC: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 				case RS::LIGHT_PROJECTOR_FILTER_LINEAR_MIPMAPS_ANISOTROPIC: {
-					sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+					sampler = p_samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 				} break;
 			}
 
@@ -1674,7 +1677,7 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			uniforms.push_back(u);
 		}
 
-		uniforms.append_array(material_storage->get_default_sampler_uniforms(SAMPLERS_BINDING_FIRST_INDEX));
+		uniforms.append_array(p_samplers.get_uniforms(SAMPLERS_BINDING_FIRST_INDEX));
 
 		render_base_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, scene_shader.default_shader_rd, SCENE_UNIFORM_SET);
 	}
@@ -1905,7 +1908,7 @@ void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, 
 		}
 	}
 
-	p_render_data->scene_data->update_ubo(scene_state.uniform_buffers[p_index], get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_flip_y, p_pancake_shadows, p_screen_size, p_default_bg_color, _render_buffers_get_luminance_multiplier(), p_opaque_render_buffers);
+	p_render_data->scene_data->update_ubo(scene_state.uniform_buffers[p_index], get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_flip_y, p_pancake_shadows, p_screen_size, p_default_bg_color, _render_buffers_get_luminance_multiplier(), p_opaque_render_buffers, false);
 }
 
 void RenderForwardMobile::_fill_element_info(RenderListType p_render_list, uint32_t p_offset, int32_t p_max_elements) {
@@ -2243,7 +2246,7 @@ void RenderForwardMobile::GeometryInstanceForwardMobile::set_lightmap_capture(co
 
 void RenderForwardMobile::geometry_instance_free(RenderGeometryInstance *p_geometry_instance) {
 	GeometryInstanceForwardMobile *ginstance = static_cast<GeometryInstanceForwardMobile *>(p_geometry_instance);
-	ERR_FAIL_COND(!ginstance);
+	ERR_FAIL_NULL(ginstance);
 	if (ginstance->lightmap_sh != nullptr) {
 		geometry_instance_lightmap_sh.free(ginstance->lightmap_sh);
 	}
@@ -2470,7 +2473,7 @@ void RenderForwardMobile::_geometry_instance_add_surface(GeometryInstanceForward
 		m_src = scene_shader.default_material;
 	}
 
-	ERR_FAIL_COND(!material);
+	ERR_FAIL_NULL(material);
 
 	_geometry_instance_add_surface_with_material_chain(ginstance, p_surface, material, m_src, p_mesh);
 
@@ -2613,6 +2616,10 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 		if (particles_storage->particles_get_frame_counter(ginstance->data->base) == 0) {
 			// Particles haven't been cleared or updated, update once now to ensure they are ready to render.
 			particles_storage->update_particles();
+		}
+
+		if (ginstance->data->dirty_dependencies) {
+			particles_storage->particles_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
 		}
 	} else if (ginstance->data->base_type == RS::INSTANCE_MESH) {
 		if (mesh_storage->skeleton_is_valid(ginstance->data->skeleton)) {

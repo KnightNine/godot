@@ -51,6 +51,7 @@ void TextServerExtension::_bind_methods() {
 	/* Font interface */
 
 	GDVIRTUAL_BIND(_create_font);
+	GDVIRTUAL_BIND(_create_font_linked_variation, "font_rid");
 
 	GDVIRTUAL_BIND(_font_set_data, "font_rid", "data");
 	GDVIRTUAL_BIND(_font_set_data_ptr, "font_rid", "data_ptr", "data_size");
@@ -108,6 +109,9 @@ void TextServerExtension::_bind_methods() {
 
 	GDVIRTUAL_BIND(_font_set_embolden, "font_rid", "strength");
 	GDVIRTUAL_BIND(_font_get_embolden, "font_rid");
+
+	GDVIRTUAL_BIND(_font_set_spacing, "font_rid", "spacing", "value");
+	GDVIRTUAL_BIND(_font_get_spacing, "font_rid", "spacing");
 
 	GDVIRTUAL_BIND(_font_set_transform, "font_rid", "transform");
 	GDVIRTUAL_BIND(_font_get_transform, "font_rid");
@@ -409,6 +413,12 @@ RID TextServerExtension::create_font() {
 	return ret;
 }
 
+RID TextServerExtension::create_font_linked_variation(const RID &p_font_rid) {
+	RID ret;
+	GDVIRTUAL_CALL(_create_font_linked_variation, p_font_rid, ret);
+	return ret;
+}
+
 void TextServerExtension::font_set_data(const RID &p_font_rid, const PackedByteArray &p_data) {
 	GDVIRTUAL_CALL(_font_set_data, p_font_rid, p_data);
 }
@@ -596,6 +606,16 @@ void TextServerExtension::font_set_embolden(const RID &p_font_rid, double p_stre
 double TextServerExtension::font_get_embolden(const RID &p_font_rid) const {
 	double ret = 0;
 	GDVIRTUAL_CALL(_font_get_embolden, p_font_rid, ret);
+	return ret;
+}
+
+void TextServerExtension::font_set_spacing(const RID &p_font_rid, SpacingType p_spacing, int64_t p_value) {
+	GDVIRTUAL_CALL(_font_set_spacing, p_font_rid, p_spacing, p_value);
+}
+
+int64_t TextServerExtension::font_get_spacing(const RID &p_font_rid, SpacingType p_spacing) const {
+	int64_t ret = 0;
+	GDVIRTUAL_CALL(_font_get_spacing, p_font_rid, p_spacing, ret);
 	return ret;
 }
 

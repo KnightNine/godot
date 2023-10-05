@@ -206,6 +206,7 @@ void TextServer::_bind_methods() {
 	/* Font Interface */
 
 	ClassDB::bind_method(D_METHOD("create_font"), &TextServer::create_font);
+	ClassDB::bind_method(D_METHOD("create_font_linked_variation", "font_rid"), &TextServer::create_font_linked_variation);
 
 	ClassDB::bind_method(D_METHOD("font_set_data", "font_rid", "data"), &TextServer::font_set_data);
 
@@ -262,6 +263,9 @@ void TextServer::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("font_set_embolden", "font_rid", "strength"), &TextServer::font_set_embolden);
 	ClassDB::bind_method(D_METHOD("font_get_embolden", "font_rid"), &TextServer::font_get_embolden);
+
+	ClassDB::bind_method(D_METHOD("font_set_spacing", "font_rid", "spacing", "value"), &TextServer::font_set_spacing);
+	ClassDB::bind_method(D_METHOD("font_get_spacing", "font_rid", "spacing"), &TextServer::font_get_spacing);
 
 	ClassDB::bind_method(D_METHOD("font_set_transform", "font_rid", "transform"), &TextServer::font_set_transform);
 	ClassDB::bind_method(D_METHOD("font_get_transform", "font_rid"), &TextServer::font_get_transform);

@@ -130,6 +130,14 @@
 				Returns embolden strength, if is not equal to zero, emboldens the font outlines. Negative values reduce the outline thickness.
 			</description>
 		</method>
+		<method name="get_extra_spacing" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="cache_index" type="int" />
+			<param index="1" name="spacing" type="int" enum="TextServer.SpacingType" />
+			<description>
+				Returns spacing for [param spacing] (see [enum TextServer.SpacingType]) in pixels (not relative to the font size).
+			</description>
+		</method>
 		<method name="get_face_index" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="cache_index" type="int" />
@@ -247,7 +255,7 @@
 			<return type="Vector2i[]" />
 			<param index="0" name="cache_index" type="int" />
 			<description>
-				Returns list of the font sizes in the cache. Each size is [code]Vector2i[/code] with font size and outline size.
+				Returns list of the font sizes in the cache. Each size is [Vector2i] with font size and outline size.
 			</description>
 		</method>
 		<method name="get_texture_count" qualifiers="const">
@@ -434,6 +442,15 @@
 			<param index="1" name="strength" type="float" />
 			<description>
 				Sets embolden strength, if is not equal to zero, emboldens the font outlines. Negative values reduce the outline thickness.
+			</description>
+		</method>
+		<method name="set_extra_spacing">
+			<return type="void" />
+			<param index="0" name="cache_index" type="int" />
+			<param index="1" name="spacing" type="int" enum="TextServer.SpacingType" />
+			<param index="2" name="value" type="int" />
+			<description>
+				Sets the spacing for [param spacing] (see [enum TextServer.SpacingType]) to [param value] in pixels (not relative to the font size).
 			</description>
 		</method>
 		<method name="set_face_index">
