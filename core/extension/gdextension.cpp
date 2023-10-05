@@ -743,6 +743,7 @@ Error GDExtension::open_library(const String &p_path, const String &p_entry_symb
 		return OK;
 	} else {
 		ERR_PRINT("GDExtension initialization function '" + p_entry_symbol + "' returned an error.");
+		OS::get_singleton()->close_dynamic_library(library);
 		return FAILED;
 	}
 }
@@ -928,6 +929,10 @@ Error GDExtensionResourceLoader::load_gdextension_resource(const String &p_path,
 			DirAccess::remove_absolute(p_extension->get_temp_library_path());
 		}
 #endif
+
+		// Unreference the extension so that this loading can be considered a failure.
+		p_extension.unref();
+
 		// Errors already logged in open_library()
 		return err;
 	}
@@ -937,7 +942,12 @@ Error GDExtensionResourceLoader::load_gdextension_resource(const String &p_path,
 		List<String> keys;
 		config->get_section_keys("icons", &keys);
 		for (const String &key : keys) {
-			p_extension->class_icon_paths[key] = config->get_value("icons", key);
+			String icon_path = config->get_value("icons", key);
+			if (icon_path.is_relative_path()) {
+				icon_path = p_path.get_base_dir().path_join(icon_path);
+			}
+
+			p_extension->class_icon_paths[key] = icon_path;
 		}
 	}
 
