@@ -33,6 +33,11 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/script_language.h"
 
+
+void AStar3D::set_debug_mode(bool is_active) {
+	debug_mode_active = is_active;
+}
+
 int64_t AStar3D::get_available_point_id() const {
 	if (points.has(last_free_id)) {
 		int64_t cur_new_id = last_free_id + 1;
@@ -835,7 +840,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 
 
 
-	print_line(vformat("	pathing from: %d to: %d", begin_octant->id, end_octant->id));
+	_debug_print(vformat("	pathing from: %d to: %d", begin_octant->id, end_octant->id));
 
 	begin_octant->g_score = 0;
 	begin_octant->f_score = _estimate_octant_cost(begin_octant->id, end_octant->id);
@@ -852,7 +857,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 	while (!oct_open_list.is_empty()) {
 		Octant* o = oct_open_list[0]; // The currently processed octant
 
-		//print_line(vformat("running through octant of index %d.", o->id));
+		//_debug_print(vformat("running through octant of index %d.", o->id));
 
 		oct_sorter.pop_heap(0, oct_open_list.size(), oct_open_list.ptr()); // Remove the current octant from the open list
 		oct_open_list.remove_at(oct_open_list.size() - 1);
@@ -877,7 +882,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 			while (connection == -1 && i < size) {
 
 				Octant* prev_octant = o->prev_octants[i];//r[i];
-				print_line(vformat("%d _can_path octant %d", o->id, prev_octant->id));
+				_debug_print(vformat("%d _can_path octant %d", o->id, prev_octant->id));
 				//id of the previous octant before the previous octant
 				int64_t ppo_id = -1;
 				if (prev_octant->prev_octant != nullptr) {
@@ -905,7 +910,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 
 			//if no connection can be made to this octant, skip to the next most viable octant
 			if (connection == -1) {
-				print_line(vformat("un-passing octant %d", o->id));
+				_debug_print(vformat("un-passing octant %d", o->id));
 				o->open_pass -= 1; // mark the octant as no longer in the open list so that another path to it may be made to it from a different neighbouring octant (won't this cause an infinite loop?, (probably not since once all neighbouring octants have tried to path to this octant, it will no longer show up within the open_list ))
 				continue;
 			}
@@ -939,7 +944,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 		}
 
 
-		print_line(vformat("testing neighbors of octant %d", o->id));
+		_debug_print(vformat("testing neighbors of octant %d", o->id));
 
 
 		for (OAHashMap<int64_t, Octant*>::Iterator it = o->neighbours.iter(); it.valid; it = o->neighbours.next_iter(it)) {
@@ -954,7 +959,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 
 
 
-			//print_line(vformat("		testing neighbor %d: supported is %s, closed is %s",oe->id,  supported?"T":"F",(oe->closed_pass == oct_pass) ? "T" : "F"));
+			//_debug_print(vformat("		testing neighbor %d: supported is %s, closed is %s",oe->id,  supported?"T":"F",(oe->closed_pass == oct_pass) ? "T" : "F"));
 
 			if (oe->closed_pass == oct_pass || !supported) {
 				continue;
@@ -976,7 +981,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 				//clear prev_octants from previous pathing calls
 				oe->prev_octants.clear();
 
-				print_line(vformat("===new oct neighbor %d", oe->id));
+				_debug_print(vformat("===new oct neighbor %d", oe->id));
 			}
 			else if (tentative_g_score >= oe->g_score) { // The new path is worse than the previous.
 				continue;
@@ -993,7 +998,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 
 
 			//if (o->neighbours.has(end_octant->id)) {
-			print_line(vformat("~~~testing neighbor %d, g_score is %d, f_score is %d", oe->id, tentative_g_score, oe->f_score));
+			_debug_print(vformat("~~~testing neighbor %d, g_score is %d, f_score is %d", oe->id, tentative_g_score, oe->f_score));
 			//}
 
 			if (new_octant) { // The position of the new points is already known.
@@ -1006,7 +1011,7 @@ bool AStar3D::_octants_solve(Point* begin_point, Point* end_point, int32_t relev
 	}
 
 
-	print_line(vformat("found_route %s", found_route ? "T" : "F"));
+	_debug_print(vformat("found_route %s", found_route ? "T" : "F"));
 
 	return found_route;
 }
@@ -1120,7 +1125,7 @@ int AStar3D::_can_path(Point* begin_point, Point* end_point, int32_t relevant_la
 			}
 			else {
 
-				print_line(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, prev_p->id));
+				_debug_print(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, prev_p->id));
 
 
 
@@ -1139,7 +1144,7 @@ int AStar3D::_can_path(Point* begin_point, Point* end_point, int32_t relevant_la
 
 	}
 	else {
-		print_line("Not using straight paths");
+		_debug_print("Not using straight paths");
 	}
 
 
@@ -1181,7 +1186,7 @@ int AStar3D::_can_path(Point* begin_point, Point* end_point, int32_t relevant_la
 
 
 			if (p != begin_point) {
-				print_line(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, p->prev_point->id));
+				_debug_print(vformat("p_id %d, of octant %d, points to prev octant %d, points back to point %d.", p->id, p->octant->id, prev_octant_id, p->prev_point->id));
 			}
 
 
@@ -1277,14 +1282,14 @@ int AStar3D::_can_path(Point* begin_point, Point* end_point, int32_t relevant_la
 			}
 		}
 		if (found_point != -1) {
-			print_line(vformat("++found_point %d, of end octant %d, from begin octant %d and point %d.", found_point, end_octant->id, begin_octant->id, begin_point->id));
+			_debug_print(vformat("++found_point %d, of end octant %d, from begin octant %d and point %d.", found_point, end_octant->id, begin_octant->id, begin_point->id));
 		}
 		else {
-			print_line(vformat("--did not find point to end octant %d, from begin octant %d and point %d.", end_octant->id, begin_octant->id, begin_point->id));
+			_debug_print(vformat("--did not find point to end octant %d, from begin octant %d and point %d.", end_octant->id, begin_octant->id, begin_point->id));
 		}
 	}
 
-	print_line("broke");
+	_debug_print("broke");
 	return found_point;
 }
 
@@ -1377,6 +1382,14 @@ bool AStar3D::_solve(Point *begin_point, Point *end_point, int32_t relevant_laye
 	}
 
 	return found_route;
+}
+
+void AStar3D::_debug_print(Variant v)
+{
+	if (debug_mode_active){
+		print_line(v);
+	}
+	
 }
 
 real_t AStar3D::_estimate_cost(int64_t p_from_id, int64_t p_to_id) {
@@ -1520,7 +1533,7 @@ Vector<Vector3> AStar3D::get_point_path(int64_t p_from_id, int64_t p_to_id, int3
 				Point* pp;
 				bool pp_exists = p->octant_source_prev_point.lookup(po_id, pp);
 				p->octant_source_prev_point.clear();
-				print_line(vformat("in p %d pp_exists %s, p->octant = %d, o_id = %d, po_id = %d", p->id, pp_exists ? "T" : "F", p->octant->id, o->id, po_id));
+				_debug_print(vformat("in p %d pp_exists %s, p->octant = %d, o_id = %d, po_id = %d", p->id, pp_exists ? "T" : "F", p->octant->id, o->id, po_id));
 
 				CRASH_COND_MSG(!pp_exists, "path failed");
 
@@ -1598,7 +1611,7 @@ Vector<Vector3> AStar3D::get_point_path(int64_t p_from_id, int64_t p_to_id, int3
 
 		w[idx] = p2->pos; // Assign first
 
-		print_line(vformat("removed_p_idx %d, pc %d", removed_p_idx, pc));
+		_debug_print(vformat("removed_p_idx %d, pc %d", removed_p_idx, pc));
 		if (removed_p_idx > 0) {
 			for (int i = 0; i < pc - removed_p_idx; i++) {
 				w[i] = w[i + removed_p_idx];
@@ -1768,7 +1781,7 @@ Vector<int64_t> AStar3D::get_id_path(int64_t p_from_id, int64_t p_to_id, int32_t
 
 		
 
-		print_line(vformat("removed_p_idx %d, pc %d", removed_p_idx, pc));
+		_debug_print(vformat("removed_p_idx %d, pc %d", removed_p_idx, pc));
 		if (removed_p_idx > 0) {
 			for (int i = 0; i < pc - removed_p_idx; i++) {
 				w[i] = w[i + removed_p_idx];
@@ -1965,7 +1978,7 @@ PackedInt64Array AStar3D::_get_straight_line(int64_t from_p_id, int64_t to_p_id)
 }
 
 void AStar3D::_bind_methods() {
-	
+	ClassDB::bind_method(D_METHOD("set_debug_mode", "is_active"), &AStar3D::set_debug_mode);
 	ClassDB::bind_method(D_METHOD("get_available_point_id"), &AStar3D::get_available_point_id);
 	ClassDB::bind_method(D_METHOD("add_point", "id", "position", "weight_scale", "point_layers"), &AStar3D::add_point, DEFVAL(1.0), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("add_octant", "id", "pool_points", "pos", "center_point"), &AStar3D::add_octant);
@@ -2021,7 +2034,7 @@ void AStar3D::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("_get_straight_line", "from_id", "to_id"), &AStar3D::_get_straight_line);
 
-
+	GDVIRTUAL_BIND(_debug_print, "v")
 	GDVIRTUAL_BIND(_estimate_cost, "from_id", "to_id")
 	GDVIRTUAL_BIND(_compute_cost, "from_id", "to_id")
 	GDVIRTUAL_BIND(_estimate_octant_cost, "from_id", "to_id")

@@ -184,6 +184,8 @@ class AStar3D : public RefCounted {
 	StringName straight_line_function;
 	ObjectID function_source_id;
 
+	bool debug_mode_active = false;
+
 	bool _solve(Point *begin_point, Point *end_point, int32_t relevant_layers, bool use_octants);
 	bool _octants_solve(Point* begin_point, Point* end_point, int32_t relevant_layers);
 	int _can_path(Point* begin_point, Point* end_point, int32_t relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int64_t prev_octant_id, Point* absolute_begin_point, Point* absolute_end_point);
@@ -191,11 +193,14 @@ class AStar3D : public RefCounted {
 protected:
 	static void _bind_methods();
 
+
+	virtual void _debug_print(Variant v);
 	virtual real_t _estimate_cost(int64_t p_from_id, int64_t p_to_id);
 	virtual real_t _compute_cost(int64_t p_from_id, int64_t p_to_id);
 	virtual real_t _compute_octant_cost(int64_t o_from_id, int64_t o_to_id);
 	virtual real_t _estimate_octant_cost(int64_t o_from_id, int64_t o_to_id);
 
+	GDVIRTUAL1(_debug_print, Variant)
 	GDVIRTUAL2RC(real_t, _estimate_cost, int64_t, int64_t)
 	GDVIRTUAL2RC(real_t, _compute_cost, int64_t, int64_t)
 	GDVIRTUAL2RC(real_t, _estimate_octant_cost, int64_t, int64_t)
@@ -203,6 +208,8 @@ protected:
 
 
 public:
+	void set_debug_mode(bool is_active);
+
 	int64_t get_available_point_id() const;
 
 	void add_point(int64_t p_id, const Vector3 &p_pos, real_t p_weight_scale = 1, int32_t p_layers = 0);
