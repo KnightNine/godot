@@ -35,6 +35,7 @@
 #include "core/object/method_bind.h"
 #include "core/os/os.h"
 #include "core/version.h"
+#include "gdextension_manager.h"
 
 extern void gdextension_setup_interface();
 extern GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *p_name);
@@ -218,36 +219,30 @@ public:
 #ifdef TOOLS_ENABLED
 		ERR_FAIL_COND_MSG(!valid, vformat("Cannot call invalid GDExtension method bind '%s'. It's probably cached - you may need to restart Godot.", name));
 #endif
-		ERR_FAIL_COND_MSG(vararg, "Validated methods don't have ptrcall support. This is most likely an engine bug.");
+		ERR_FAIL_COND_MSG(vararg, "Vararg methods don't have validated call support. This is most likely an engine bug.");
 		GDExtensionClassInstancePtr extension_instance = is_static() ? nullptr : p_object->_get_extension_instance();
 
 		if (validated_call_func) {
 			// This is added here, but it's unlikely to be provided by most extensions.
 			validated_call_func(method_userdata, extension_instance, reinterpret_cast<GDExtensionConstVariantPtr *>(p_args), (GDExtensionVariantPtr)r_ret);
 		} else {
-#if 1
-			// Slow code-path, but works for the time being.
-			Callable::CallError ce;
-			call(p_object, p_args, argument_count, ce);
-#else
-			// This is broken, because it needs more information to do the calling properly
-
 			// If not provided, go via ptrcall, which is faster than resorting to regular call.
 			const void **argptrs = (const void **)alloca(argument_count * sizeof(void *));
 			for (uint32_t i = 0; i < argument_count; i++) {
 				argptrs[i] = VariantInternal::get_opaque_pointer(p_args[i]);
 			}
 
-			bool returns = true;
-			void *ret_opaque;
-			if (returns) {
-				ret_opaque = VariantInternal::get_opaque_pointer(r_ret);
-			} else {
-				ret_opaque = nullptr; // May be unnecessary as this is ignored, but just in case.
+			void *ret_opaque = nullptr;
+			if (r_ret) {
+				VariantInternal::initialize(r_ret, return_value_info.type);
+				ret_opaque = r_ret->get_type() == Variant::NIL ? r_ret : VariantInternal::get_opaque_pointer(r_ret);
 			}
 
 			ptrcall(p_object, argptrs, ret_opaque);
-#endif
+
+			if (r_ret && r_ret->get_type() == Variant::OBJECT) {
+				VariantInternal::update_object_id(r_ret);
+			}
 		}
 	}
 
@@ -669,7 +664,7 @@ void GDExtension::_get_library_path(GDExtensionClassLibraryPtr p_library, GDExte
 	memnew_placement(r_path, String(self->library_path));
 }
 
-HashMap<StringName, GDExtensionInterfaceFunctionPtr> gdextension_interface_functions;
+HashMap<StringName, GDExtensionInterfaceFunctionPtr> GDExtension::gdextension_interface_functions;
 
 void GDExtension::register_interface_function(StringName p_function_name, GDExtensionInterfaceFunctionPtr p_function_pointer) {
 	ERR_FAIL_COND_MSG(gdextension_interface_functions.has(p_function_name), "Attempt to register interface function '" + p_function_name + "', which appears to be already registered.");
@@ -782,7 +777,7 @@ void GDExtension::initialize_library(InitializationLevel p_level) {
 
 	level_initialized = int32_t(p_level);
 
-	ERR_FAIL_COND(initialization.initialize == nullptr);
+	ERR_FAIL_NULL(initialization.initialize);
 
 	initialization.initialize(initialization.userdata, GDExtensionInitializationLevel(p_level));
 }
@@ -839,6 +834,10 @@ void GDExtension::initialize_gdextensions() {
 	register_interface_function("classdb_register_extension_class_signal", (GDExtensionInterfaceFunctionPtr)&GDExtension::_register_extension_class_signal);
 	register_interface_function("classdb_unregister_extension_class", (GDExtensionInterfaceFunctionPtr)&GDExtension::_unregister_extension_class);
 	register_interface_function("get_library_path", (GDExtensionInterfaceFunctionPtr)&GDExtension::_get_library_path);
+}
+
+void GDExtension::finalize_gdextensions() {
+	gdextension_interface_functions.clear();
 }
 
 Error GDExtensionResourceLoader::load_gdextension_resource(const String &p_path, Ref<GDExtension> &p_extension) {
@@ -955,11 +954,18 @@ Error GDExtensionResourceLoader::load_gdextension_resource(const String &p_path,
 }
 
 Ref<Resource> GDExtensionResourceLoader::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, CacheMode p_cache_mode) {
-	Ref<GDExtension> lib;
-	Error err = load_gdextension_resource(p_path, lib);
-	if (err != OK && r_error) {
-		// Errors already logged in load_gdextension_resource().
-		*r_error = err;
+	// We can't have two GDExtension resource object representing the same library, because
+	// loading (or unloading) a GDExtension affects global data. So, we need reuse the same
+	// object if one has already been loaded (even if caching is disabled at the resource
+	// loader level).
+	GDExtensionManager *manager = GDExtensionManager::get_singleton();
+	Ref<GDExtension> lib = manager->get_extension(p_path);
+	if (lib.is_null()) {
+		Error err = load_gdextension_resource(p_path, lib);
+		if (err != OK && r_error) {
+			// Errors already logged in load_gdextension_resource().
+			*r_error = err;
+		}
 	}
 	return lib;
 }
