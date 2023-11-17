@@ -5476,664 +5476,622 @@ bool Animation::_fetch_compressed_by_index(uint32_t p_compressed_track, int p_in
 }
 
 // Helper math functions for Variant.
-Variant Animation::add_variant(const Variant &a, const Variant &b) {
-	if (a.get_type() != b.get_type()) {
-		if (a.is_num() && b.is_num()) {
-			return real_t(a) + real_t(b);
+bool Animation::is_variant_interpolatable(const Variant p_value) {
+	Variant::Type type = p_value.get_type();
+	return (type >= Variant::BOOL && type <= Variant::STRING_NAME) || type == Variant::ARRAY || type >= Variant::PACKED_INT32_ARRAY; // PackedByteArray is unsigned, so it would be better to ignore since blending uses float.
+}
+
+Variant Animation::cast_to_blendwise(const Variant p_value) {
+	switch (p_value.get_type()) {
+		case Variant::BOOL:
+		case Variant::INT: {
+			return p_value.operator real_t();
+		} break;
+		case Variant::STRING:
+		case Variant::STRING_NAME: {
+			return string_to_array(p_value);
+		} break;
+		case Variant::RECT2I: {
+			return p_value.operator Rect2();
+		} break;
+		case Variant::VECTOR2I: {
+			return p_value.operator Vector2();
+		} break;
+		case Variant::VECTOR3I: {
+			return p_value.operator Vector3();
+		} break;
+		case Variant::VECTOR4I: {
+			return p_value.operator Vector4();
+		} break;
+		case Variant::PACKED_INT32_ARRAY: {
+			return p_value.operator PackedFloat32Array();
+		} break;
+		case Variant::PACKED_INT64_ARRAY: {
+			return p_value.operator PackedFloat64Array();
+		} break;
+		default: {
+		} break;
+	}
+	return p_value;
+}
+
+Variant Animation::cast_from_blendwise(const Variant p_value, const Variant::Type p_type) {
+	switch (p_type) {
+		case Variant::BOOL: {
+			return p_value.operator real_t() >= 0.5;
+		} break;
+		case Variant::INT: {
+			return (int)Math::round(p_value.operator real_t());
+		} break;
+		case Variant::STRING: {
+			return array_to_string(p_value);
+		} break;
+		case Variant::STRING_NAME: {
+			return StringName(array_to_string(p_value));
+		} break;
+		case Variant::RECT2I: {
+			return Rect2i(p_value.operator Rect2().round());
+		} break;
+		case Variant::VECTOR2I: {
+			return Vector2i(p_value.operator Vector2().round());
+		} break;
+		case Variant::VECTOR3I: {
+			return Vector3i(p_value.operator Vector3().round());
+		} break;
+		case Variant::VECTOR4I: {
+			return Vector4i(p_value.operator Vector4().round());
+		} break;
+		case Variant::PACKED_INT32_ARRAY: {
+			PackedFloat32Array old_val = p_value.operator PackedFloat32Array();
+			PackedInt32Array new_val;
+			new_val.resize(old_val.size());
+			int *new_val_w = new_val.ptrw();
+			for (int i = 0; i < old_val.size(); i++) {
+				new_val_w[i] = (int32_t)Math::round(old_val[i]);
+			}
+			return new_val;
+		} break;
+		case Variant::PACKED_INT64_ARRAY: {
+			PackedFloat64Array old_val = p_value.operator PackedFloat64Array();
+			PackedInt64Array new_val;
+			for (int i = 0; i < old_val.size(); i++) {
+				new_val.push_back((int64_t)Math::round(old_val[i]));
+			}
+			return new_val;
+		} break;
+		default: {
+		} break;
+	}
+	return p_value;
+}
+
+Variant Animation::string_to_array(const Variant p_value) {
+	if (!p_value.is_string()) {
+		return p_value;
+	};
+	const String &str = p_value.operator String();
+	PackedFloat32Array arr;
+	for (int i = 0; i < str.length(); i++) {
+		arr.push_back((float)str[i]);
+	}
+	return arr;
+}
+
+Variant Animation::array_to_string(const Variant p_value) {
+	if (!p_value.is_array()) {
+		return p_value;
+	};
+	const PackedFloat32Array &arr = p_value.operator PackedFloat32Array();
+	String str;
+	for (int i = 0; i < arr.size(); i++) {
+		char32_t c = (char32_t)Math::round(arr[i]);
+		if (c == 0 || (c & 0xfffff800) == 0xd800 || c > 0x10ffff) {
+			c = ' ';
 		}
+		str += c;
+	}
+	return str;
+}
+
+Variant Animation::add_variant(const Variant &a, const Variant &b) {
+	if (a.get_type() != b.get_type() && !a.is_array()) {
 		return a;
 	}
 
 	switch (a.get_type()) {
 		case Variant::NIL: {
 			return Variant();
-		}
-		case Variant::BOOL: {
-			return (a.operator real_t()) + (b.operator real_t()); // It is cast for interpolation.
-		}
+		} break;
+		case Variant::FLOAT: {
+			return (a.operator real_t()) + (b.operator real_t());
+		} break;
 		case Variant::RECT2: {
 			const Rect2 ra = a.operator Rect2();
 			const Rect2 rb = b.operator Rect2();
 			return Rect2(ra.position + rb.position, ra.size + rb.size);
-		}
-		case Variant::RECT2I: {
-			const Rect2i ra = a.operator Rect2i();
-			const Rect2i rb = b.operator Rect2i();
-			return Rect2i(ra.position + rb.position, ra.size + rb.size);
-		}
+		} break;
 		case Variant::PLANE: {
 			const Plane pa = a.operator Plane();
 			const Plane pb = b.operator Plane();
 			return Plane(pa.normal + pb.normal, pa.d + pb.d);
-		}
+		} break;
 		case Variant::AABB: {
 			const ::AABB aa = a.operator ::AABB();
 			const ::AABB ab = b.operator ::AABB();
 			return ::AABB(aa.position + ab.position, aa.size + ab.size);
-		}
+		} break;
 		case Variant::BASIS: {
 			return (a.operator Basis()) * (b.operator Basis());
-		}
+		} break;
 		case Variant::QUATERNION: {
 			return (a.operator Quaternion()) * (b.operator Quaternion());
-		}
+		} break;
 		case Variant::TRANSFORM2D: {
 			return (a.operator Transform2D()) * (b.operator Transform2D());
-		}
+		} break;
 		case Variant::TRANSFORM3D: {
 			return (a.operator Transform3D()) * (b.operator Transform3D());
-		}
+		} break;
+		case Variant::INT:
+		case Variant::RECT2I:
+		case Variant::VECTOR2I:
+		case Variant::VECTOR3I:
+		case Variant::VECTOR4I:
+		case Variant::PACKED_INT32_ARRAY:
+		case Variant::PACKED_INT64_ARRAY: {
+			// Fallback the interpolatable value which needs casting.
+			return cast_from_blendwise(add_variant(cast_to_blendwise(a), cast_to_blendwise(b)), a.get_type());
+		} break;
+		case Variant::BOOL:
+		case Variant::STRING:
+		case Variant::STRING_NAME: {
+			// Specialized for Tween.
+			return b;
+		} break;
+		case Variant::PACKED_BYTE_ARRAY: {
+			// Skip.
+		} break;
 		default: {
 			if (a.is_array()) {
-				switch (a.get_type()) {
-				case Variant::ARRAY: {
-					Array arr_a = a;
-					Array arr_b = b;
-					int size = arr_a.size();
-					if (size == 0 || arr_b.size() != size) {
-						return a;
-					}
+				const Array arr_a = a.operator Array();
+				const Array arr_b = b.operator Array();
 
-					Array result;
+				int min_size = arr_a.size();
+				int max_size = arr_b.size();
+				bool is_a_larger = inform_variant_array(min_size, max_size);
 
-					if (arr_a.is_typed() && arr_b.is_typed()) {
-						uint32_t type_a = arr_a.get_typed_builtin();
-						uint32_t type_b = arr_b.get_typed_builtin();
-
-						if (type_a != type_b) {
-							// Do not add different typed Arrays, make an exception for numbers.
-							if ((type_a != Variant::FLOAT && type_b != Variant::INT) &&
-								type_a != Variant::INT && type_b != Variant::FLOAT) {
-								return a;
-							}
+				Array result;
+				result.set_typed(MAX(arr_a.get_typed_builtin(), arr_b.get_typed_builtin()), StringName(), Variant());
+				result.resize(min_size);
+				int i = 0;
+				for (; i < min_size; i++) {
+					result[i] = add_variant(arr_a[i], arr_b[i]);
+				}
+				if (min_size != max_size) {
+					// Process with last element of the lesser array.
+					// This is pretty funny and bizarre, but artists like to use it for polygon animation.
+					Variant lesser_last;
+					result.resize(max_size);
+					if (is_a_larger) {
+						if (i > 0) {
+							lesser_last = arr_b[i - 1];
+						} else {
+							Variant vz = arr_a[i];
+							vz.zero();
+							lesser_last = vz;
 						}
-
-						result.set_typed(type_a, StringName(), Variant());
+						for (; i < max_size; i++) {
+							result[i] = add_variant(arr_a[i], lesser_last);
+						}
+					} else {
+						if (i > 0) {
+							lesser_last = arr_a[i - 1];
+						} else {
+							Variant vz = arr_b[i];
+							vz.zero();
+							lesser_last = vz;
+						}
+						for (; i < max_size; i++) {
+							result[i] = add_variant(lesser_last, arr_b[i]);
+						}
 					}
-
-					result.resize(size);
-					for (int i = 0; i < size; i++) {
-						result[i] = add_variant(arr_a[i], arr_b[i]);
-					}
-					return result;
-				};
-				case Variant::PACKED_BYTE_ARRAY: {
-					return add_packed_array(PackedByteArray(a), PackedByteArray(b));
 				}
-				case Variant::PACKED_INT32_ARRAY: {
-					return add_packed_array(PackedInt32Array(a), PackedInt32Array(b));
-				}
-				case Variant::PACKED_INT64_ARRAY: {
-					return add_packed_array(PackedInt64Array(a), PackedInt64Array(b));
-				}
-				case Variant::PACKED_FLOAT32_ARRAY: {
-					return add_packed_array(PackedFloat32Array(a), PackedFloat32Array(b));
-				}
-				case Variant::PACKED_FLOAT64_ARRAY: {
-					return add_packed_array(PackedFloat64Array(a), PackedFloat64Array(b));
-				}
-				case Variant::PACKED_STRING_ARRAY: {
-					return b; // Special case. Just override.
-				}
-				case Variant::PACKED_VECTOR2_ARRAY: {
-					return add_packed_array(PackedVector2Array(a), PackedVector2Array(b));
-				}
-				case Variant::PACKED_VECTOR3_ARRAY: {
-					return add_packed_array(PackedVector3Array(a), PackedVector3Array(b));
-				}
-				case Variant::PACKED_COLOR_ARRAY: {
-					return add_packed_array(PackedColorArray(a), PackedColorArray(b));
-				}
-				default: {
-					return a;
-				}
-				}
+				return result;
 			}
-			return Variant::evaluate(Variant::OP_ADD, a, b);
-		}
+		} break;
 	}
+	return Variant::evaluate(Variant::OP_ADD, a, b);
 }
 
 Variant Animation::subtract_variant(const Variant &a, const Variant &b) {
-	if (a.get_type() != b.get_type()) {
-		if (a.is_num() && b.is_num()) {
-			return real_t(a) - real_t(b);
-		}
+	if (a.get_type() != b.get_type() && !a.is_array()) {
 		return a;
 	}
 
 	switch (a.get_type()) {
 		case Variant::NIL: {
 			return Variant();
-		}
-		case Variant::BOOL: {
-			return (a.operator real_t()) - (b.operator real_t()); // It is cast for interpolation.
-		}
+		} break;
+		case Variant::FLOAT: {
+			return (a.operator real_t()) - (b.operator real_t());
+		} break;
 		case Variant::RECT2: {
 			const Rect2 ra = a.operator Rect2();
 			const Rect2 rb = b.operator Rect2();
 			return Rect2(ra.position - rb.position, ra.size - rb.size);
-		}
-		case Variant::RECT2I: {
-			const Rect2i ra = a.operator Rect2i();
-			const Rect2i rb = b.operator Rect2i();
-			return Rect2i(ra.position - rb.position, ra.size - rb.size);
-		}
+		} break;
 		case Variant::PLANE: {
 			const Plane pa = a.operator Plane();
 			const Plane pb = b.operator Plane();
 			return Plane(pa.normal - pb.normal, pa.d - pb.d);
-		}
+		} break;
 		case Variant::AABB: {
 			const ::AABB aa = a.operator ::AABB();
 			const ::AABB ab = b.operator ::AABB();
 			return ::AABB(aa.position - ab.position, aa.size - ab.size);
-		}
+		} break;
 		case Variant::BASIS: {
 			return (b.operator Basis()).inverse() * (a.operator Basis());
-		}
+		} break;
 		case Variant::QUATERNION: {
 			return (b.operator Quaternion()).inverse() * (a.operator Quaternion());
-		}
+		} break;
 		case Variant::TRANSFORM2D: {
 			return (b.operator Transform2D()).affine_inverse() * (a.operator Transform2D());
-		}
+		} break;
 		case Variant::TRANSFORM3D: {
 			return (b.operator Transform3D()).affine_inverse() * (a.operator Transform3D());
-		}
+		} break;
+		case Variant::INT:
+		case Variant::RECT2I:
+		case Variant::VECTOR2I:
+		case Variant::VECTOR3I:
+		case Variant::VECTOR4I:
+		case Variant::PACKED_INT32_ARRAY:
+		case Variant::PACKED_INT64_ARRAY: {
+			// Fallback the interpolatable value which needs casting.
+			return cast_from_blendwise(subtract_variant(cast_to_blendwise(a), cast_to_blendwise(b)), a.get_type());
+		} break;
+		case Variant::BOOL:
+		case Variant::STRING:
+		case Variant::STRING_NAME: {
+			// Specialized for Tween.
+			return a;
+		} break;
+		case Variant::PACKED_BYTE_ARRAY: {
+			// Skip.
+		} break;
 		default: {
 			if (a.is_array()) {
-				switch (a.get_type()) {
-				case Variant::ARRAY: {
-					Array arr_a = a;
-					Array arr_b = b;
-					int size = arr_a.size();
-					if (size == 0 || arr_b.size() != size) {
-						return a;
-					}
+				const Array arr_a = a.operator Array();
+				const Array arr_b = b.operator Array();
 
-					Array result;
+				int min_size = arr_a.size();
+				int max_size = arr_b.size();
+				bool is_a_larger = inform_variant_array(min_size, max_size);
 
-					if (arr_a.is_typed() && arr_b.is_typed()) {
-						uint32_t type_a = arr_a.get_typed_builtin();
-						uint32_t type_b = arr_b.get_typed_builtin();
-
-						if (type_a != type_b) {
-							// Do not subtract different typed Arrays, make an exception for numbers.
-							if ((type_a != Variant::FLOAT && type_b != Variant::INT) &&
-								type_a != Variant::INT && type_b != Variant::FLOAT) {
-								return a;
-							}
+				Array result;
+				result.set_typed(MAX(arr_a.get_typed_builtin(), arr_b.get_typed_builtin()), StringName(), Variant());
+				result.resize(min_size);
+				int i = 0;
+				for (; i < min_size; i++) {
+					result[i] = subtract_variant(arr_a[i], arr_b[i]);
+				}
+				if (min_size != max_size) {
+					// Process with last element of the lesser array.
+					// This is pretty funny and bizarre, but artists like to use it for polygon animation.
+					Variant lesser_last;
+					result.resize(max_size);
+					if (is_a_larger) {
+						if (i > 0) {
+							lesser_last = arr_b[i - 1];
+						} else {
+							Variant vz = arr_a[i];
+							vz.zero();
+							lesser_last = vz;
 						}
-
-						result.set_typed(type_a, StringName(), Variant());
+						for (; i < max_size; i++) {
+							result[i] = subtract_variant(arr_a[i], lesser_last);
+						}
+					} else {
+						if (i > 0) {
+							lesser_last = arr_a[i - 1];
+						} else {
+							Variant vz = arr_b[i];
+							vz.zero();
+							lesser_last = vz;
+						}
+						for (; i < max_size; i++) {
+							result[i] = subtract_variant(lesser_last, arr_b[i]);
+						}
 					}
-
-					result.resize(size);
-					for (int i = 0; i < size; i++) {
-						result[i] = subtract_variant(arr_a[i], arr_b[i]);
-					}
-					return result;
-				};
-				case Variant::PACKED_BYTE_ARRAY: {
-					return subtract_packed_array(PackedByteArray(a), PackedByteArray(b));
 				}
-				case Variant::PACKED_INT32_ARRAY: {
-					return subtract_packed_array(PackedInt32Array(a), PackedInt32Array(b));
-				}
-				case Variant::PACKED_INT64_ARRAY: {
-					return subtract_packed_array(PackedInt64Array(a), PackedInt64Array(b));
-				}
-				case Variant::PACKED_FLOAT32_ARRAY: {
-					return subtract_packed_array(PackedFloat32Array(a), PackedFloat32Array(b));
-				}
-				case Variant::PACKED_FLOAT64_ARRAY: {
-					return subtract_packed_array(PackedFloat64Array(a), PackedFloat64Array(b));
-				}
-				case Variant::PACKED_STRING_ARRAY: {
-					return a; // Special case. Leave as is.
-				}
-				case Variant::PACKED_VECTOR2_ARRAY: {
-					return subtract_packed_array(PackedVector2Array(a), PackedVector2Array(b));
-				}
-				case Variant::PACKED_VECTOR3_ARRAY: {
-					return subtract_packed_array(PackedVector3Array(a), PackedVector3Array(b));
-				}
-				case Variant::PACKED_COLOR_ARRAY: {
-					return subtract_packed_array(PackedColorArray(a), PackedColorArray(b));
-				}
-				default: {
-					return a;
-				}
-				}
+				return result;
 			}
-			return Variant::evaluate(Variant::OP_SUBTRACT, a, b);
-		}
+		} break;
 	}
+	return Variant::evaluate(Variant::OP_SUBTRACT, a, b);
 }
 
 Variant Animation::blend_variant(const Variant &a, const Variant &b, float c) {
-	if (a.get_type() != b.get_type()) {
-		if (a.is_num() && b.is_num()) {
-			double va = a;
-			double vb = b;
-			return va + vb * c;
-		}
+	if (a.get_type() != b.get_type() && !a.is_array()) {
 		return a;
 	}
 
 	switch (a.get_type()) {
 		case Variant::NIL: {
 			return Variant();
-		}
-		case Variant::INT: {
-			return int64_t((a.operator int64_t()) + (b.operator int64_t()) * c + 0.5);
-		}
+		} break;
 		case Variant::FLOAT: {
-			return (a.operator double()) + (b.operator double()) * c;
-		}
+			return (a.operator real_t()) + (b.operator real_t()) * c;
+		} break;
 		case Variant::VECTOR2: {
 			return (a.operator Vector2()) + (b.operator Vector2()) * c;
-		}
-		case Variant::VECTOR2I: {
-			const Vector2i va = a.operator Vector2i();
-			const Vector2i vb = b.operator Vector2i();
-			return Vector2i(int32_t(va.x + vb.x * c + 0.5), int32_t(va.y + vb.y * c + 0.5));
-		}
+		} break;
 		case Variant::RECT2: {
 			const Rect2 ra = a.operator Rect2();
 			const Rect2 rb = b.operator Rect2();
 			return Rect2(ra.position + rb.position * c, ra.size + rb.size * c);
-		}
-		case Variant::RECT2I: {
-			const Rect2i ra = a.operator Rect2i();
-			const Rect2i rb = b.operator Rect2i();
-			return Rect2i(int32_t(ra.position.x + rb.position.x * c + 0.5), int32_t(ra.position.y + rb.position.y * c + 0.5), int32_t(ra.size.x + rb.size.x * c + 0.5), int32_t(ra.size.y + rb.size.y * c + 0.5));
-		}
+		} break;
 		case Variant::VECTOR3: {
 			return (a.operator Vector3()) + (b.operator Vector3()) * c;
-		}
-		case Variant::VECTOR3I: {
-			const Vector3i va = a.operator Vector3i();
-			const Vector3i vb = b.operator Vector3i();
-			return Vector3i(int32_t(va.x + vb.x * c + 0.5), int32_t(va.y + vb.y * c + 0.5), int32_t(va.z + vb.z * c + 0.5));
-		}
+		} break;
 		case Variant::VECTOR4: {
 			return (a.operator Vector4()) + (b.operator Vector4()) * c;
-		}
-		case Variant::VECTOR4I: {
-			const Vector4i va = a.operator Vector4i();
-			const Vector4i vb = b.operator Vector4i();
-			return Vector4i(int32_t(va.x + vb.x * c + 0.5), int32_t(va.y + vb.y * c + 0.5), int32_t(va.z + vb.z * c + 0.5), int32_t(va.w + vb.w * c + 0.5));
-		}
+		} break;
 		case Variant::PLANE: {
 			const Plane pa = a.operator Plane();
 			const Plane pb = b.operator Plane();
 			return Plane(pa.normal + pb.normal * c, pa.d + pb.d * c);
-		}
+		} break;
 		case Variant::COLOR: {
 			return (a.operator Color()) + (b.operator Color()) * c;
-		}
+		} break;
 		case Variant::AABB: {
 			const ::AABB aa = a.operator ::AABB();
 			const ::AABB ab = b.operator ::AABB();
 			return ::AABB(aa.position + ab.position * c, aa.size + ab.size * c);
-		}
+		} break;
 		case Variant::BASIS: {
 			return (a.operator Basis()) + (b.operator Basis()) * c;
-		}
+		} break;
 		case Variant::QUATERNION: {
 			return (a.operator Quaternion()) * Quaternion().slerp((b.operator Quaternion()), c);
-		}
+		} break;
 		case Variant::TRANSFORM2D: {
 			return (a.operator Transform2D()) * Transform2D().interpolate_with((b.operator Transform2D()), c);
-		}
+		} break;
 		case Variant::TRANSFORM3D: {
 			return (a.operator Transform3D()) * Transform3D().interpolate_with((b.operator Transform3D()), c);
-		}
+		} break;
+		case Variant::BOOL:
+		case Variant::INT:
+		case Variant::RECT2I:
+		case Variant::VECTOR2I:
+		case Variant::VECTOR3I:
+		case Variant::VECTOR4I:
+		case Variant::PACKED_INT32_ARRAY:
+		case Variant::PACKED_INT64_ARRAY: {
+			// Fallback the interpolatable value which needs casting.
+			return cast_from_blendwise(blend_variant(cast_to_blendwise(a), cast_to_blendwise(b), c), a.get_type());
+		} break;
+		case Variant::STRING:
+		case Variant::STRING_NAME: {
+			Array arr_a = cast_to_blendwise(a);
+			Array arr_b = cast_to_blendwise(b);
+			int min_size = arr_a.size();
+			int max_size = arr_b.size();
+			bool is_a_larger = inform_variant_array(min_size, max_size);
+			int mid_size = interpolate_variant(arr_a.size(), arr_b.size(), c);
+			if (is_a_larger) {
+				arr_a.resize(mid_size);
+			} else {
+				arr_b.resize(mid_size);
+			}
+			return cast_from_blendwise(blend_variant(arr_a, arr_b, c), a.get_type());
+		} break;
+		case Variant::PACKED_BYTE_ARRAY: {
+			// Skip.
+		} break;
 		default: {
 			if (a.is_array()) {
-				switch (a.get_type()) {
-				case Variant::ARRAY: {
-					Array arr_a = a;
-					Array arr_b = b;
-					int size = arr_a.size();
-					if (size == 0 || arr_b.size() != size) {
-						return a;
-					}
+				const Array arr_a = a.operator Array();
+				const Array arr_b = b.operator Array();
 
-					Array result;
+				int min_size = arr_a.size();
+				int max_size = arr_b.size();
+				bool is_a_larger = inform_variant_array(min_size, max_size);
 
-					if (arr_a.is_typed() && arr_b.is_typed()) {
-						uint32_t type_a = arr_a.get_typed_builtin();
-						uint32_t type_b = arr_b.get_typed_builtin();
-
-						if (type_a != type_b) {
-							// Do not blend different typed Arrays, make an exception for numbers.
-							if ((type_a != Variant::FLOAT && type_b != Variant::INT) &&
-								type_a != Variant::INT && type_b != Variant::FLOAT) {
-								return a;
-							}
+				Array result;
+				result.set_typed(MAX(arr_a.get_typed_builtin(), arr_b.get_typed_builtin()), StringName(), Variant());
+				result.resize(min_size);
+				int i = 0;
+				for (; i < min_size; i++) {
+					result[i] = blend_variant(arr_a[i], arr_b[i], c);
+				}
+				if (min_size != max_size) {
+					// Process with last element of the lesser array.
+					// This is pretty funny and bizarre, but artists like to use it for polygon animation.
+					Variant lesser_last;
+					if (is_a_larger && !Math::is_equal_approx(c, 1.0f)) {
+						result.resize(max_size);
+						if (i > 0) {
+							lesser_last = arr_b[i - 1];
+						} else {
+							Variant vz = arr_a[i];
+							vz.zero();
+							lesser_last = vz;
 						}
-
-						result.set_typed(type_a, StringName(), Variant());
+						for (; i < max_size; i++) {
+							result[i] = blend_variant(arr_a[i], lesser_last, c);
+						}
+					} else if (!is_a_larger && !Math::is_zero_approx(c)) {
+						result.resize(max_size);
+						if (i > 0) {
+							lesser_last = arr_a[i - 1];
+						} else {
+							Variant vz = arr_b[i];
+							vz.zero();
+							lesser_last = vz;
+						}
+						for (; i < max_size; i++) {
+							result[i] = blend_variant(lesser_last, arr_b[i], c);
+						}
 					}
-
-					result.resize(size);
-					for (int i = 0; i < size; i++) {
-						result[i] = blend_variant(arr_a[i], arr_b[i], c);
-					}
-					return result;
-				} break;
-				case Variant::PACKED_BYTE_ARRAY: {
-					return blend_packed_array(PackedByteArray(a), PackedByteArray(b), c);
 				}
-				case Variant::PACKED_INT32_ARRAY: {
-					return blend_packed_array(PackedInt32Array(a), PackedInt32Array(b), c);
-				}
-				case Variant::PACKED_INT64_ARRAY: {
-					return blend_packed_array(PackedInt64Array(a), PackedInt64Array(b), c);
-				}
-				case Variant::PACKED_FLOAT32_ARRAY: {
-					return blend_packed_array(PackedFloat32Array(a), PackedFloat32Array(b), c);
-				}
-				case Variant::PACKED_FLOAT64_ARRAY: {
-					return blend_packed_array(PackedFloat64Array(a), PackedFloat64Array(b), c);
-				}
-				case Variant::PACKED_STRING_ARRAY: {
-					return blend_packed_array(PackedStringArray(a), PackedStringArray(b), c);
-				}
-				case Variant::PACKED_VECTOR2_ARRAY: {
-					return blend_packed_array(PackedVector2Array(a), PackedVector2Array(b), c);
-				}
-				case Variant::PACKED_VECTOR3_ARRAY: {
-					return blend_packed_array(PackedVector3Array(a), PackedVector3Array(b), c);
-				}
-				case Variant::PACKED_COLOR_ARRAY: {
-					return blend_packed_array(PackedColorArray(a), PackedColorArray(b), c);
-				}
-				default: {
-					return a;
-				}
-				}
+				return result;
 			}
-			return c < 0.5 ? a : b;
-		}
+		} break;
 	}
+	return c < 0.5 ? a : b;
 }
 
-Variant Animation::interpolate_variant(const Variant &a, const Variant &b, float c) {
-	if (a.get_type() != b.get_type()) {
-		if (a.is_num() && b.is_num()) {
-			double va = a;
-			double vb = b;
-			return va + (vb - va) * c;
-		}
+Variant Animation::interpolate_variant(const Variant &a, const Variant &b, float c, bool p_snap_array_element) {
+	if (a.get_type() != b.get_type() && !a.is_array()) {
 		return a;
 	}
 
 	switch (a.get_type()) {
 		case Variant::NIL: {
 			return Variant();
-		}
-		case Variant::INT: {
-			const int64_t va = a.operator int64_t();
-			return int64_t(va + ((b.operator int64_t()) - va) * c);
-		}
+		} break;
 		case Variant::FLOAT: {
-			const double va = a.operator double();
-			return va + ((b.operator double()) - va) * c;
-		}
+			const real_t va = a.operator real_t();
+			return va + ((b.operator real_t()) - va) * c;
+		} break;
 		case Variant::VECTOR2: {
 			return (a.operator Vector2()).lerp(b.operator Vector2(), c);
-		}
-		case Variant::VECTOR2I: {
-			const Vector2i va = a.operator Vector2i();
-			const Vector2i vb = b.operator Vector2i();
-			return Vector2i(int32_t(va.x + (vb.x - va.x) * c), int32_t(va.y + (vb.y - va.y) * c));
-		}
+		} break;
 		case Variant::RECT2: {
 			const Rect2 ra = a.operator Rect2();
 			const Rect2 rb = b.operator Rect2();
 			return Rect2(ra.position.lerp(rb.position, c), ra.size.lerp(rb.size, c));
-		}
-		case Variant::RECT2I: {
-			const Rect2i ra = a.operator Rect2i();
-			const Rect2i rb = b.operator Rect2i();
-			return Rect2i(int32_t(ra.position.x + (rb.position.x - ra.position.x) * c), int32_t(ra.position.y + (rb.position.y - ra.position.y) * c), int32_t(ra.size.x + (rb.size.x - ra.size.x) * c), int32_t(ra.size.y + (rb.size.y - ra.size.y) * c));
-		}
+		} break;
 		case Variant::VECTOR3: {
 			return (a.operator Vector3()).lerp(b.operator Vector3(), c);
-		}
-		case Variant::VECTOR3I: {
-			const Vector3i va = a.operator Vector3i();
-			const Vector3i vb = b.operator Vector3i();
-			return Vector3i(int32_t(va.x + (vb.x - va.x) * c), int32_t(va.y + (vb.y - va.y) * c), int32_t(va.z + (vb.z - va.z) * c));
-		}
+		} break;
 		case Variant::VECTOR4: {
 			return (a.operator Vector4()).lerp(b.operator Vector4(), c);
-		}
-		case Variant::VECTOR4I: {
-			const Vector4i va = a.operator Vector4i();
-			const Vector4i vb = b.operator Vector4i();
-			return Vector4i(int32_t(va.x + (vb.x - va.x) * c), int32_t(va.y + (vb.y - va.y) * c), int32_t(va.z + (vb.z - va.z) * c), int32_t(va.w + (vb.w - va.w) * c));
-		}
+		} break;
 		case Variant::PLANE: {
 			const Plane pa = a.operator Plane();
 			const Plane pb = b.operator Plane();
 			return Plane(pa.normal.lerp(pb.normal, c), pa.d + (pb.d - pa.d) * c);
-		}
+		} break;
 		case Variant::COLOR: {
 			return (a.operator Color()).lerp(b.operator Color(), c);
-		}
+		} break;
 		case Variant::AABB: {
 			const ::AABB aa = a.operator ::AABB();
 			const ::AABB ab = b.operator ::AABB();
 			return ::AABB(aa.position.lerp(ab.position, c), aa.size.lerp(ab.size, c));
-		}
+		} break;
 		case Variant::BASIS: {
 			return (a.operator Basis()).lerp(b.operator Basis(), c);
-		}
+		} break;
 		case Variant::QUATERNION: {
 			return (a.operator Quaternion()).slerp(b.operator Quaternion(), c);
-		}
+		} break;
 		case Variant::TRANSFORM2D: {
 			return (a.operator Transform2D()).interpolate_with(b.operator Transform2D(), c);
-		}
+		} break;
 		case Variant::TRANSFORM3D: {
 			return (a.operator Transform3D()).interpolate_with(b.operator Transform3D(), c);
-		}
-		case Variant::STRING: {
-			// This is pretty funny and bizarre, but artists like to use it for typewriter effects.
-			const String sa = a.operator String();
-			const String sb = b.operator String();
-			String dst;
-			int sa_len = sa.length();
-			int sb_len = sb.length();
-			int csize = sa_len + (sb_len - sa_len) * c;
-			if (csize == 0) {
-				return "";
+		} break;
+		case Variant::BOOL:
+		case Variant::INT:
+		case Variant::RECT2I:
+		case Variant::VECTOR2I:
+		case Variant::VECTOR3I:
+		case Variant::VECTOR4I:
+		case Variant::PACKED_INT32_ARRAY:
+		case Variant::PACKED_INT64_ARRAY: {
+			// Fallback the interpolatable value which needs casting.
+			return cast_from_blendwise(interpolate_variant(cast_to_blendwise(a), cast_to_blendwise(b), c), a.get_type());
+		} break;
+		case Variant::STRING:
+		case Variant::STRING_NAME: {
+			Array arr_a = cast_to_blendwise(a);
+			Array arr_b = cast_to_blendwise(b);
+			int min_size = arr_a.size();
+			int max_size = arr_b.size();
+			bool is_a_larger = inform_variant_array(min_size, max_size);
+			int mid_size = interpolate_variant(arr_a.size(), arr_b.size(), c);
+			if (is_a_larger) {
+				arr_a.resize(mid_size);
+			} else {
+				arr_b.resize(mid_size);
 			}
-			dst.resize(csize + 1);
-			dst[csize] = 0;
-			int split = csize / 2;
-
-			for (int i = 0; i < csize; i++) {
-				char32_t chr = ' ';
-
-				if (i < split) {
-					if (i < sa.length()) {
-						chr = sa[i];
-					} else if (i < sb.length()) {
-						chr = sb[i];
-					}
-
-				} else {
-					if (i < sb.length()) {
-						chr = sb[i];
-					} else if (i < sa.length()) {
-						chr = sa[i];
-					}
-				}
-
-				dst[i] = chr;
-			}
-
-			return dst;
-		}
+			return cast_from_blendwise(interpolate_variant(arr_a, arr_b, c, true), a.get_type());
+		} break;
+		case Variant::PACKED_BYTE_ARRAY: {
+			// Skip.
+		} break;
 		default: {
 			if (a.is_array()) {
-				switch (a.get_type()) {
-				case Variant::ARRAY: {
-					Array arr_a = a;
-					Array arr_b = b;
-					int size = arr_a.size();
-					if (size == 0 || arr_b.size() != size) {
-						return a;
-					}
+				const Array arr_a = a.operator Array();
+				const Array arr_b = b.operator Array();
 
-					Array result;
+				int min_size = arr_a.size();
+				int max_size = arr_b.size();
+				bool is_a_larger = inform_variant_array(min_size, max_size);
 
-					if (arr_a.is_typed() && arr_b.is_typed()) {
-						uint32_t type_a = arr_a.get_typed_builtin();
-						uint32_t type_b = arr_b.get_typed_builtin();
-
-						if (type_a != type_b) {
-							// Do not interpolate different typed Arrays, make an exception for numbers.
-							if ((type_a != Variant::FLOAT && type_b != Variant::INT) &&
-								type_a != Variant::INT && type_b != Variant::FLOAT) {
-								return a;
-							}
+				Array result;
+				result.set_typed(MAX(arr_a.get_typed_builtin(), arr_b.get_typed_builtin()), StringName(), Variant());
+				result.resize(min_size);
+				int i = 0;
+				for (; i < min_size; i++) {
+					result[i] = interpolate_variant(arr_a[i], arr_b[i], c);
+				}
+				if (min_size != max_size) {
+					// Process with last element of the lesser array.
+					// This is pretty funny and bizarre, but artists like to use it for polygon animation.
+					Variant lesser_last;
+					if (is_a_larger && !Math::is_equal_approx(c, 1.0f)) {
+						result.resize(max_size);
+						if (p_snap_array_element) {
+							c = 0;
 						}
-
-						result.set_typed(type_a, StringName(), Variant());
+						if (i > 0) {
+							lesser_last = arr_b[i - 1];
+						} else {
+							Variant vz = arr_a[i];
+							vz.zero();
+							lesser_last = vz;
+						}
+						for (; i < max_size; i++) {
+							result[i] = interpolate_variant(arr_a[i], lesser_last, c);
+						}
+					} else if (!is_a_larger && !Math::is_zero_approx(c)) {
+						result.resize(max_size);
+						if (p_snap_array_element) {
+							c = 1;
+						}
+						if (i > 0) {
+							lesser_last = arr_a[i - 1];
+						} else {
+							Variant vz = arr_b[i];
+							vz.zero();
+							lesser_last = vz;
+						}
+						for (; i < max_size; i++) {
+							result[i] = interpolate_variant(lesser_last, arr_b[i], c);
+						}
 					}
-
-					result.resize(size);
-					for (int i = 0; i < size; i++) {
-						result[i] = interpolate_variant(arr_a[i], arr_b[i], c);
-					}
-					return result;
-				} break;
-				case Variant::PACKED_BYTE_ARRAY: {
-					return interpolate_packed_array(PackedByteArray(a), PackedByteArray(b), c);
 				}
-				case Variant::PACKED_INT32_ARRAY: {
-					return interpolate_packed_array(PackedInt32Array(a), PackedInt32Array(b), c);
-				}
-				case Variant::PACKED_INT64_ARRAY: {
-					return interpolate_packed_array(PackedInt64Array(a), PackedInt64Array(b), c);
-				}
-				case Variant::PACKED_FLOAT32_ARRAY: {
-					return interpolate_packed_array(PackedFloat32Array(a), PackedFloat32Array(b), c);
-				}
-				case Variant::PACKED_FLOAT64_ARRAY: {
-					return interpolate_packed_array(PackedFloat64Array(a), PackedFloat64Array(b), c);
-				}
-				case Variant::PACKED_STRING_ARRAY: {
-					return interpolate_packed_array(PackedStringArray(a), PackedStringArray(b), c);
-				}
-				case Variant::PACKED_VECTOR2_ARRAY: {
-					return interpolate_packed_array(PackedVector2Array(a), PackedVector2Array(b), c);
-				}
-				case Variant::PACKED_VECTOR3_ARRAY: {
-					return interpolate_packed_array(PackedVector3Array(a), PackedVector3Array(b), c);
-				}
-				case Variant::PACKED_COLOR_ARRAY: {
-					return interpolate_packed_array(PackedColorArray(a), PackedColorArray(b), c);
-				}
-				default: {
-					return a;
-				}
-				}
+				return result;
 			}
-			return c < 0.5 ? a : b;
-		}
+		} break;
 	}
+	return c < 0.5 ? a : b;
 }
 
-template <class T>
-Vector<T> Animation::add_packed_array(Vector<T> a, Vector<T> b) {
-	int size = a.size();
-	if (size == 0 || b.size() != size) {
-		return a;
+bool Animation::inform_variant_array(int &r_min, int &r_max) {
+	if (r_min <= r_max) {
+		return false;
 	}
-	else {
-		Vector<T> result;
-		result.resize(size);
-
-		T* result_ptr = result.ptrw();
-		const T* a_ptr = a.ptr();
-		const T* b_ptr = b.ptr();
-
-		for (int i = 0; i < size; i++) {
-			result_ptr[i] = a_ptr[i] + b_ptr[i];
-		}
-		return result;
-	}
-}
-
-template <class T>
-Vector<T> Animation::subtract_packed_array(Vector<T> a, Vector<T> b) {
-	int size = a.size();
-	if (size == 0 || b.size() != size) {
-		return a;
-	}
-	else {
-		Vector<T> result;
-		result.resize(size);
-
-		T* result_ptr = result.ptrw();
-		const T* a_ptr = a.ptr();
-		const T* b_ptr = b.ptr();
-
-		for (int i = 0; i < size; i++) {
-			result_ptr[i] = a_ptr[i] - b_ptr[i];
-		}
-		return result;
-	}
-}
-
-template <class T>
-Vector<T> Animation::blend_packed_array(Vector<T> a, Vector<T> b, float c) {
-	int size = a.size();
-	if (size == 0 || b.size() != size) {
-		return a;
-	}
-	else {
-		Vector<T> result;
-		result.resize(size);
-
-		T* result_ptr = result.ptrw();
-		const T* a_ptr = a.ptr();
-		const T* b_ptr = b.ptr();
-
-		for (int i = 0; i < size; i++) {
-			result_ptr[i] = blend_variant(a_ptr[i], b_ptr[i], c);
-		}
-		return result;
-	}
-}
-
-template <class T>
-Vector<T> Animation::interpolate_packed_array(Vector<T> a, Vector<T> b, float c) {
-	int size = a.size();
-	if (size == 0 || b.size() != size) {
-		return a;
-	}
-	else {
-		Vector<T> result;
-		result.resize(size);
-
-		T* result_ptr = result.ptrw();
-		const T* a_ptr = a.ptr();
-		const T* b_ptr = b.ptr();
-
-		for (int i = 0; i < size; i++) {
-			result_ptr[i] = interpolate_variant(a_ptr[i], b_ptr[i], c);
-		}
-		return result;
-	}
+	SWAP(r_min, r_max);
+	return true;
 }
 
 
