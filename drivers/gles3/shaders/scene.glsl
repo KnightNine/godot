@@ -417,13 +417,12 @@ void main() {
 	normal = modelview_normal * normal;
 #endif
 
-#endif
-
 #if defined(TANGENT_USED) || defined(NORMAL_MAP_USED) || defined(LIGHT_ANISOTROPY_USED)
 
 	binormal = modelview_normal * binormal;
 	tangent = modelview_normal * tangent;
 #endif
+#endif // !defined(SKIP_TRANSFORM_USED) && !defined(VERTEX_WORLD_COORDS_USED)
 
 	// Using world coordinates
 #if !defined(SKIP_TRANSFORM_USED) && defined(VERTEX_WORLD_COORDS_USED)
@@ -1616,7 +1615,6 @@ void main() {
 	float directional_shadow = 1.0;
 
 	if (depth_z < light_split_offsets.y) {
-		float pssm_fade = 0.0;
 
 #ifdef LIGHT_USE_PSSM_BLEND
 		float directional_shadow2 = 1.0;
@@ -1624,7 +1622,6 @@ void main() {
 		bool use_blend = true;
 #endif
 		if (depth_z < light_split_offsets.x) {
-			float pssm_fade = 0.0;
 			directional_shadow = shadow1;
 
 #ifdef LIGHT_USE_PSSM_BLEND
@@ -1633,7 +1630,6 @@ void main() {
 #endif
 		} else {
 			directional_shadow = shadow2;
-			pssm_fade = smoothstep(light_split_offsets.x, light_split_offsets.y, depth_z);
 #ifdef LIGHT_USE_PSSM_BLEND
 			use_blend = false;
 #endif
@@ -1643,7 +1639,6 @@ void main() {
 			directional_shadow = mix(directional_shadow, directional_shadow2, pssm_blend);
 		}
 #endif
-		directional_shadow = mix(directional_shadow, 1.0, pssm_fade);
 	}
 
 #endif //LIGHT_USE_PSSM2
@@ -1659,7 +1654,6 @@ void main() {
 	float directional_shadow = 1.0;
 
 	if (depth_z < light_split_offsets.w) {
-		float pssm_fade = 0.0;
 
 #ifdef LIGHT_USE_PSSM_BLEND
 		float directional_shadow2 = 1.0;
@@ -1695,7 +1689,6 @@ void main() {
 
 			} else {
 				directional_shadow = shadow4;
-				pssm_fade = smoothstep(light_split_offsets.z, light_split_offsets.w, depth_z);
 
 #if defined(LIGHT_USE_PSSM_BLEND)
 				use_blend = false;
@@ -1707,7 +1700,6 @@ void main() {
 			directional_shadow = mix(directional_shadow, directional_shadow2, pssm_blend);
 		}
 #endif
-		directional_shadow = mix(directional_shadow, 1.0, pssm_fade);
 	}
 
 #endif //LIGHT_USE_PSSM4
