@@ -2187,7 +2187,10 @@ void RenderingServer::fix_surface_compatibility(SurfaceData &p_surface, const St
 			ERR_FAIL_COND(p_surface.blend_shape_data.size() != new_blend_shape_data.size());
 
 			p_surface.blend_shape_data = new_blend_shape_data;
+			
 		}
+
+		
 	}
 	p_surface.format &= ~(ARRAY_FLAG_FORMAT_VERSION_MASK << ARRAY_FLAG_FORMAT_VERSION_SHIFT);
 	p_surface.format |= ARRAY_FLAG_FORMAT_CURRENT_VERSION & (ARRAY_FLAG_FORMAT_VERSION_MASK << ARRAY_FLAG_FORMAT_VERSION_SHIFT);

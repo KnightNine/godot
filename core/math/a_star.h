@@ -187,6 +187,7 @@ class AStar3D : public RefCounted {
 	bool debug_mode_active = false;
 
 	bool _solve(Point *begin_point, Point *end_point, int32_t relevant_layers, bool use_octants);
+	bool _try_straight_solve(Point *begin_point, Point *end_point, int32_t relevant_layers);
 	bool _octants_solve(Point* begin_point, Point* end_point, int32_t relevant_layers);
 	int _can_path(Point* begin_point, Point* end_point, int32_t relevant_layers, Octant* begin_octant, Octant* end_octant, bool reach_end_point, int64_t prev_octant_id, Point* absolute_begin_point, Point* absolute_end_point);
 

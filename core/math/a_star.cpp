@@ -1294,11 +1294,74 @@ int AStar3D::_can_path(Point* begin_point, Point* end_point, int32_t relevant_la
 }
 
 
+bool AStar3D::_try_straight_solve(Point *begin_point, Point *end_point, int32_t relevant_layers) {
+	//try straight path first
+	if (!function_source_id.is_null()) {
+		Vector<int64_t> straight_path = _get_straight_line(begin_point->id, end_point->id);
+		const int64_t *r = straight_path.ptr();
+		int size = straight_path.size();
+		bool straight_path_valid = true;
+
+		Point *prev_p = begin_point;
+
+		//i skips begin point
+		for (int i = 1; i < size; i++) {
+			int64_t p_id = r[i];
+			int64_t prev_p_id = r[i - 1];
+
+			//check if point exists,
+			Point *p;
+			if (!points.lookup(p_id, p)) {
+				straight_path_valid = false;
+				break;
+			}
+
+			//check if point is connected to previous point
+			Segment s(prev_p_id, p_id);
+			const HashSet<Segment, Segment>::Iterator element = segments.find(s);
+
+			bool connected = element && (element->direction & s.direction) == s.direction;
+
+			if (!connected) {
+				straight_path_valid = false;
+				break;
+			}
+
+			//is supported by layers,
+			bool supported = relevant_layers == 0 || (relevant_layers & p->nav_layers) > 0;
+
+			//not disabled, and not of a modified weight scale
+			if (!p->enabled || !supported || p->weight_scale != real_t(1)) {
+				straight_path_valid = false;
+				break;
+			}
+			p->prev_point = prev_p;
+
+			prev_p = p;
+		}
+
+		if (straight_path_valid) {
+			return true;
+		}
+
+	} else {
+		_debug_print("Not using straight paths");
+	}
+	return false;
+}
+
+
 bool AStar3D::_solve(Point *begin_point, Point *end_point, int32_t relevant_layers, bool use_octants) {
 
 	id_path_of_last_pathing_call.clear();
 	point_path_of_last_pathing_call.clear();
 	closest_point_of_last_pathing_call = nullptr;
+
+
+	
+
+	
+
 
 
 	if (use_octants) {
@@ -1495,18 +1558,27 @@ Vector<Vector3> AStar3D::get_point_path(int64_t p_from_id, int64_t p_to_id, int3
 
 	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31) - 1), Vector<Vector3>());
 
-	bool found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
-	if (!found_route) {
-		if (closest_point_of_last_pathing_call == nullptr) {
-			return Vector<Vector3>();
-		}
-
-
-		//use closest point instead
-		end_point = closest_point_of_last_pathing_call;
-
-		WARN_PRINT(vformat("closest_point_of_last_pathing_call: %d,%d,%d .", closest_point_of_last_pathing_call->pos.x, closest_point_of_last_pathing_call->pos.y, closest_point_of_last_pathing_call->pos.z));
+	bool found_straight_route = _try_straight_solve(begin_point, end_point, relevant_layers);
+	bool found_route = false;
+	if (found_straight_route) {
+		use_octants = false;
+		found_route = true;
 	}
+
+	if (!found_straight_route) {
+		found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
+		if (!found_route) {
+			if (closest_point_of_last_pathing_call == nullptr) {
+				return Vector<Vector3>();
+			}
+
+			//use closest point instead
+			end_point = closest_point_of_last_pathing_call;
+
+			WARN_PRINT(vformat("closest_point_of_last_pathing_call: %d,%d,%d .", closest_point_of_last_pathing_call->pos.x, closest_point_of_last_pathing_call->pos.y, closest_point_of_last_pathing_call->pos.z));
+		}
+	}
+	
 
 	Point *p = end_point;
 	int64_t pc = 1; // Begin point
@@ -1673,15 +1745,24 @@ Vector<int64_t> AStar3D::get_id_path(int64_t p_from_id, int64_t p_to_id, int32_t
 
 	ERR_FAIL_INDEX_V(relevant_layers, ((1 << 31) - 1), Vector<int64_t>());
 
-	bool found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
-	if (!found_route) {
-		if (closest_point_of_last_pathing_call == nullptr) {
-			return Vector<int64_t>();
-		}
+	bool found_straight_route = _try_straight_solve(begin_point, end_point, relevant_layers);
+	bool found_route = false;
+	if (found_straight_route) {
+		use_octants = false;
+		found_route = true;
+	}
 
-		//use closest point instead
-		end_point = closest_point_of_last_pathing_call;
-		WARN_PRINT(vformat("closest_point_of_last_pathing_call: %d,%d,%d .", closest_point_of_last_pathing_call->pos.x, closest_point_of_last_pathing_call->pos.y, closest_point_of_last_pathing_call->pos.z));
+	if (!found_straight_route) {
+		found_route = _solve(begin_point, end_point, relevant_layers, use_octants);
+		if (!found_route) {
+			if (closest_point_of_last_pathing_call == nullptr) {
+				return Vector<int64_t>();
+			}
+
+			//use closest point instead
+			end_point = closest_point_of_last_pathing_call;
+			WARN_PRINT(vformat("closest_point_of_last_pathing_call: %d,%d,%d .", closest_point_of_last_pathing_call->pos.x, closest_point_of_last_pathing_call->pos.y, closest_point_of_last_pathing_call->pos.z));
+		}
 	}
 
 	Point *p = end_point;
